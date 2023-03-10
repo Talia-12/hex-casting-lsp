@@ -59,7 +59,7 @@ impl LanguageServer for Backend {
                                     document_selector: Some(vec![DocumentFilter {
                                         language: Some("nrs".to_string()),
                                         scheme: Some("file".to_string()),
-                                        pattern: None,
+                                        pattern: Some("*.nrs".to_string()),
                                     }]),
                                 }
                             },

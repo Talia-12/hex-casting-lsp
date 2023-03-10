@@ -312,9 +312,9 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
                         .map_with_span(|args, span| (args, span))
                         .repeated(),
                 )
-                .foldl(|f, args| {
-                    let span = f.1.start..args.1.end;
-                    (Expr::Call(Box::new(f), args), span)
+                .foldl(|(fe, fr), (argsv, argsr)| {
+                    let span = fr.start()..argsr.end();
+                    (Expr::Call(Box::new((fe, fr)), (argsv, argsr)), span)
                 });
 
             // Product ops (multiply and divide) have equal precedence
@@ -324,9 +324,9 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
             let product = call
                 .clone()
                 .then(op.then(call).repeated())
-                .foldl(|a, (op, b)| {
-                    let span = a.1.start..b.1.end;
-                    (Expr::Binary(Box::new(a), op, Box::new(b)), span)
+                .foldl(|(ae, ar), (op, (be, br))| {
+                    let span = ar.start()..br.end();
+                    (Expr::Binary(Box::new((ae, ar)), op, Box::new((be, br))), span)
                 });
 
             // Sum ops (add and subtract) have equal precedence
@@ -336,9 +336,9 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
             let sum = product
                 .clone()
                 .then(op.then(product).repeated())
-                .foldl(|a, (op, b)| {
-                    let span = a.1.start..b.1.end;
-                    (Expr::Binary(Box::new(a), op, Box::new(b)), span)
+                .foldl(|(ae, ar), (op, (be, br))| {
+                    let span = ar.start()..br.end();
+                    (Expr::Binary(Box::new((ae, ar)), op, Box::new((be, br))), span)
                 });
 
             // Comparison ops (equal, not-equal) have equal precedence
@@ -348,9 +348,9 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
             let compare = sum
                 .clone()
                 .then(op.then(sum).repeated())
-                .foldl(|a, (op, b)| {
-                    let span = a.1.start..b.1.end;
-                    (Expr::Binary(Box::new(a), op, Box::new(b)), span)
+                .foldl(|(ae, ar), (op, (be, br))| {
+                    let span = ar.start()..br.end();
+                    (Expr::Binary(Box::new((ae, ar)), op, Box::new((be, br))), span)
                 });
 
             compare
@@ -411,11 +411,11 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
             // Expressions, chained by semicolons, are statements
             .or(raw_expr.clone())
             .then(just(Token::Ctrl(';')).ignore_then(expr.or_not()).repeated())
-            .foldl(|a, b| {
-                let span = a.1.clone(); // TODO: Not correct
+            .foldl(|(ae, ar), b| {
+                let span = ar.clone(); // TODO: Not correct
                 (
                     Expr::Then(
-                        Box::new(a),
+                        Box::new((ae, ar)),
                         Box::new(match b {
                             Some(b) => b,
                             None => (Expr::Value(Value::Null), span.clone()),

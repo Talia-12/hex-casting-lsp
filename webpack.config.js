@@ -4,7 +4,7 @@
 
 const path = require("path");
 
-/**@type {import('webpack').Configuration}*/
+// /**@type {import('webpack').Configuration}*/
 const config = {
 	target: "webworker", // vscode extensions run in webworker context for VS Code web 📖 -> https://webpack.js.org/configuration/target/#target
 

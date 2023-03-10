@@ -3,8 +3,9 @@
 This repo is a template for `tower-lsp`, a useful github project template which makes writing new language servers easier.
 ## Development
 1. `pnpm i`
-2. `cargo build`
-3. press <kbd>F5</kbd> or change to the Debug panel and click <kbd>Launch Client</kbd>
+2. `pnpm esbuild`
+3. `cargo build`
+4. press <kbd>F5</kbd> or change to the Debug panel and click <kbd>Launch Client</kbd>
 ## A valid program in nano rust 
 ```rust
 fn factorial(x) {
