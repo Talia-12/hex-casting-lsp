@@ -59,7 +59,7 @@ impl LanguageServer for Backend {
 									document_selector: Some(vec![DocumentFilter {
 										language: Some("nrs".to_string()),
 										scheme: Some("file".to_string()),
-										pattern: Some("*.nrs".to_string()),
+										pattern: None,
 									}]),
 								}
 							},
@@ -157,10 +157,6 @@ impl LanguageServer for Backend {
 		Ok(definition)
 	}
 	async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
-		self.client
-			.log_message(MessageType::INFO, format!("asdf: {:?}", params))
-			.await;
- 
 		let reference_list = || -> Option<Vec<Location>> {
 			let uri = params.text_document_position.text_document.uri;
 			let ast = self.ast_map.get(&uri.to_string())?;
@@ -397,6 +393,10 @@ impl LanguageServer for Backend {
 	}
 
 	async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+		self.client
+			.log_message(MessageType::INFO, format!("renaming to {}", params.new_name))
+			.await;
+		
 		let workspace_edit = || -> Option<WorkspaceEdit> {
 			let uri = params.text_document_position.text_document.uri;
 			let ast = self.ast_map.get(&uri.to_string())?;
@@ -463,11 +463,7 @@ impl LanguageServer for Backend {
 	}
 
 	async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-		self.client
-		.log_message(MessageType::INFO, format!("asdf: {:?}", params))
-		.await;
-
-		let hover = || -> Option<Hover> {
+		let hover = async {
 			let uri = params.text_document_position_params.text_document.uri;
 			let ast = self.ast_map.get(&uri.to_string())?;
 			let rope = self.document_map.get(&uri.to_string())?;
@@ -475,10 +471,10 @@ impl LanguageServer for Backend {
 			let position = params.text_document_position_params.position;
 			let char = rope.try_line_to_char(position.line as usize).ok()?;
 			let offset = char + position.character as usize;
-			let reference_list = get_reference(&ast, offset, false);
+			let reference_list = get_reference(&ast, offset, true);
 			
 			Some(Hover { contents: HoverContents::Scalar(MarkedString::String(format!("count: {:?}", reference_list).to_string())), range: None })
-		}();
+		}.await;
 		Ok(hover)
 	}
 }
