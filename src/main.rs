@@ -80,6 +80,7 @@ impl LanguageServer for Backend {
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 rename_provider: Some(OneOf::Left(true)),
+				hover_provider: Some(HoverProviderCapability::Simple(true)),
                 ..ServerCapabilities::default()
             },
         })
@@ -156,6 +157,10 @@ impl LanguageServer for Backend {
         Ok(definition)
     }
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        self.client
+            .log_message(MessageType::INFO, format!("asdf: {:?}", params))
+            .await;
+ 
         let reference_list = || -> Option<Vec<Location>> {
             let uri = params.text_document_position.text_document.uri;
             let ast = self.ast_map.get(&uri.to_string())?;
@@ -456,6 +461,26 @@ impl LanguageServer for Backend {
 
         Ok(None)
     }
+
+	async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+		self.client
+		.log_message(MessageType::INFO, format!("asdf: {:?}", params))
+		.await;
+
+		let hover = || -> Option<Hover> {
+			let uri = params.text_document_position_params.text_document.uri;
+			let ast = self.ast_map.get(&uri.to_string())?;
+			let rope = self.document_map.get(&uri.to_string())?;
+
+			let position = params.text_document_position_params.position;
+			let char = rope.try_line_to_char(position.line as usize).ok()?;
+			let offset = char + position.character as usize;
+			let reference_list = get_reference(&ast, offset, false);
+			
+			Some(Hover { contents: HoverContents::Scalar(MarkedString::String(format!("count: {:?}", reference_list).to_string())), range: None })
+		}();
+		Ok(hover)
+	}
 }
 #[derive(Debug, Deserialize, Serialize)]
 struct InlayHintParams {
