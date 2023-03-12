@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use tower_lsp::lsp_types::{SemanticTokenType};
 
-use crate::chumsky::{Expr, Func, ImCompleteSemanticToken, Spanned};
+use crate::hex_parsing::{Expr, Func, ImCompleteSemanticToken, Spanned};
 
 pub const LEGEND_TYPE: &[SemanticTokenType] = &[
     SemanticTokenType::FUNCTION,
@@ -52,49 +52,7 @@ pub fn semantic_token_from_expr(
         Expr::Error => {}
         Expr::Value(_) => {}
         Expr::List(_) => {}
-        Expr::Local((_name, span)) => {
-            semantic_tokens.push(ImCompleteSemanticToken {
-                start: span.start,
-                length: span.len(),
-                token_type: LEGEND_TYPE
-                    .iter()
-                    .position(|item| item == &SemanticTokenType::VARIABLE)
-                    .unwrap(),
-            });
-        }
-        Expr::Let(_, rhs, rest, name_span) => {
-            semantic_tokens.push(ImCompleteSemanticToken {
-                start: name_span.start,
-                length: name_span.len(),
-                token_type: LEGEND_TYPE
-                    .iter()
-                    .position(|item| item == &SemanticTokenType::VARIABLE)
-                    .unwrap(),
-            });
-            semantic_token_from_expr(rhs, semantic_tokens);
-            semantic_token_from_expr(rest, semantic_tokens);
-        }
-        Expr::Then(first, rest) => {
-            semantic_token_from_expr(first, semantic_tokens);
-            semantic_token_from_expr(rest, semantic_tokens);
-        }
-        Expr::Binary(lhs, _op, rhs) => {
-            semantic_token_from_expr(lhs, semantic_tokens);
-            semantic_token_from_expr(rhs, semantic_tokens);
-        }
-        Expr::Call(expr, params) => {
-            semantic_token_from_expr(expr, semantic_tokens);
-            params.0.iter().for_each(|p| {
-                semantic_token_from_expr(p, semantic_tokens);
-            });
-        }
-        Expr::If(test, consequent, alternative) => {
-            semantic_token_from_expr(test, semantic_tokens);
-            semantic_token_from_expr(consequent, semantic_tokens);
-            semantic_token_from_expr(alternative, semantic_tokens);
-        }
-        Expr::Print(expr) => {
-            semantic_token_from_expr(expr, semantic_tokens);
-        }
+        Expr::Consideration(_) => todo!(),
+        Expr::IntroRetro(_) => todo!(),
     }
 }

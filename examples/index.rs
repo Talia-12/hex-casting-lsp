@@ -1,26 +1,19 @@
 use std::collections::HashMap;
 
 use im_rc::Vector;
-use nrs_language_server::chumsky::{parse, type_inference};
+use nrs_language_server::hex_parsing::{parse};
 
 fn main() {
     let source = include_str!("test.nrs");
     // let source = r#"
     // test
     // println!("{:?}", &source);
-    let (ast, errors, _semantic_tokens) = parse(source);
+    let (ast, errors, semantic_tokens) = parse(source);
     println!("{:?}", errors);
     if let Some(ref ast) = ast {
         println!("{:#?}", ast);
     } else {
         println!("{:?}", errors);
     }
-    println!("{:?}", _semantic_tokens);
-    let mut hashmap = HashMap::new();
-    if let Some(ast) = ast {
-        ast.into_iter().for_each(|(k, v)| {
-            type_inference(&v.body, &mut hashmap);
-        });
-    }
-    println!("{:?}", hashmap);
+    println!("{:?}", semantic_tokens);
 }
