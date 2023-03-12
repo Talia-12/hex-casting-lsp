@@ -28,6 +28,9 @@ pub enum Token {
 	Ident(String),
 	Comment(String),
 	Entity,
+	Define,
+	Arrow,
+	Bookkeepers(String),
 }
 
 impl fmt::Display for Token {
@@ -41,6 +44,9 @@ impl fmt::Display for Token {
 			Token::Ident(s) => write!(f, "{}", s),
 			Token::Comment(s) => write!(f, "{}", s),
     	Token::Entity => write!(f, "Entity"),
+    	Token::Define => write!(f, "define"),
+    	Token::Arrow => write!(f, "->"),
+    Token::Bookkeepers(s) => write!(f, "{}", s),
 		}
 	}
 }
@@ -74,7 +80,13 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 		.map(Token::Str);
 
 	// A parser for control characters (delimiters, colons, etc.)
-	let ctrl = one_of("()[]{},:\n").map(|c| Token::Ctrl(c));
+	let ctrl = one_of("()[]{},:#=\n").map(|c| Token::Ctrl(c));
+
+	// A parser for ops
+	let ops = just("->").map(|_| Token::Arrow);
+
+	// A parser for bookkeeper's gambit
+	let bookkeeper = one_of("-v").repeated().at_least(1).collect().map(Token::Bookkeepers);
 
 	// A parser for identifiers and keywords
 	let ident = ident().map(|ident: String| match ident.as_str() {
@@ -82,6 +94,7 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 		"false" => Token::Bool(false),
 		"null" => Token::Null,
 		"Entity" => Token::Entity,
+		"define" => Token::Define, // #define Pattern Name (DIR aqwed) = a -> b
 		_ => Token::Ident(ident),
 	});
 
@@ -101,6 +114,8 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 	let token = num
 		.or(str_)
 		.or(ctrl)
+		.or(ops)
+		.or(bookkeeper)
 		.or(ident)
 		.or(single_comment)
 		.or(multi_comment)
@@ -325,6 +340,30 @@ pub fn parse(
 							.position(|item| item == &SemanticTokenType::KEYWORD)
 							.unwrap(),
 				}),
+				Token::Define =>  Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+							.iter()
+							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.unwrap(),
+				}),
+				Token::Arrow =>  Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+							.iter()
+							.position(|item| item == &SemanticTokenType::OPERATOR)
+							.unwrap(),
+				}),
+				Token::Bookkeepers(_) => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+							.iter()
+							.position(|item| item == &SemanticTokenType::PARAMETER)
+							.unwrap(),
+				}),
 			})
 			.collect::<Vec<_>>();
 
@@ -373,16 +412,15 @@ pub fn parse(
 mod test {
 	use super::*;
 
-	#[test]
-	fn test_lexer() {
-		let test_inputs: Vec<&str> = vec![
+	fn test_inputs() -> Vec<String> {
+return vec![
 "{
 	Mind's Reflection
 	Compass' Purification
 	Mind's Reflection
 	Alidade's Purification
 	Archer's Distillation
-}",
+}".to_string(),
 "{
 	/*
 		This will blink the caster 5 blocks forward.
@@ -391,7 +429,7 @@ mod test {
 	Mind's Reflection
 	Consideration: 5.0
 	Blink
-}",
+}".to_string(),
 "{
 	{
 		Reveal
@@ -403,7 +441,22 @@ mod test {
 		3.3
 	]
 	Thoth's Gambit
-}"];
+}".to_string(),
+"#define New Distillation (SOUTHEAST aqwed) = int, int -> int {
+	Bookkeeper's Gambit: v-
+}
+
+{
+	Numerical Reflection: 0
+	Numerical Reflection: 1
+	New Distillation
+	Reveal
+}".to_string()]
+	}
+
+	#[test]
+	fn test_lexer() {
+		let test_inputs: Vec<String> = test_inputs();
 
 		let test_outputs: Vec<Vec<Token>> = vec![
 			vec![
@@ -438,10 +491,23 @@ mod test {
 					Token::Ctrl(']'), Token::Ctrl('\n'),
 					Token::Ident("Thoth's".to_string()), Token::Ident("Gambit".to_string()), Token::Ctrl('\n'),
 				Token::Ctrl('}')],
+			vec![
+				Token::Ctrl('#'), Token::Define, Token::Ident("New".to_string()), Token::Ident("Distillation".to_string()),
+					Token::Ctrl('('), Token::Ident("SOUTHEAST".to_string()), Token::Ident("aqwed".to_string()), Token::Ctrl(')'),
+					Token::Ctrl('='), Token::Ident("int".to_string()), Token::Ctrl(','), Token::Ident("int".to_string()), Token::Arrow, Token::Ident("int".to_string()),  Token::Ctrl('{'),  Token::Ctrl('\n'),
+					Token::Ident("Bookkeeper's".to_string()), Token::Ident("Gambit".to_string()), Token::Ctrl(':'), Token::Bookkeepers("v-".to_string()), Token::Ctrl('\n'),
+				Token::Ctrl('}'), Token::Ctrl('\n'),
+				Token::Ctrl('\n'),
+				Token::Ctrl('{'), Token::Ctrl('\n'),
+					Token::Ident("Numerical".to_string()), Token::Ident("Reflection".to_string()), Token::Ctrl(':'), Token::Num("0".to_string()), Token::Ctrl('\n'),
+					Token::Ident("Numerical".to_string()), Token::Ident("Reflection".to_string()), Token::Ctrl(':'), Token::Num("1".to_string()), Token::Ctrl('\n'),
+					Token::Ident("New".to_string()), Token::Ident("Distillation".to_string()), Token::Ctrl('\n'),
+					Token::Ident("Reveal".to_string()), Token::Ctrl('\n'),
+				Token::Ctrl('}'),]
 		];
 
 		for (test_input, test_output) in test_inputs.iter().zip(test_outputs) {
-			assert_eq!(lexer().parse_recovery(*test_input).0.unwrap().iter().map(|(token, _range)| token.clone()).collect::<Vec<_>>(), test_output);
+			assert_eq!(lexer().parse_recovery(test_input.as_str()).0.unwrap().iter().map(|(token, _range)| token.clone()).collect::<Vec<_>>(), test_output);
 		}
 	}
 }
