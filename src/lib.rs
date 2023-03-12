@@ -1,3 +1,4 @@
+pub mod hex_pattern;
 pub mod hex_parsing;
 pub mod completion;
 pub mod jump_definition;

@@ -177,12 +177,13 @@ impl Expr {
 	}
 }
 
-// A function node in the AST.
+// A function node in the AST. (macro)
 #[derive(Debug)]
 pub struct Func {
 	pub args: Vec<Spanned<String>>,
 	pub body: Spanned<Expr>,
 	pub name: Spanned<String>,
+	pub pattern: Spanned<HexPattern>,
 	pub span: Span,
 }
 

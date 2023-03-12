@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 
-use crate::hex_parsing::{Span, Error};
+use crate::hex_pattern::{HexPattern};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Iota {
@@ -9,7 +9,7 @@ pub enum Iota {
 	Bool(bool),
 	Entity(String),
 	List(Vec<Iota>),
-	Pattern(String),
+	Pattern(HexPattern),
 	Vec3((f64, f64, f64)),
 	Str(String),
 	Matrix(Vec<Vec<f64>>),
@@ -18,19 +18,6 @@ pub enum Iota {
 	ItemType(String),
 	Gate(String),
 	Item(String),
-}
-
-impl Iota {
-	fn num(self, span: Span) -> Result<f64, Error> {
-		if let Iota::Num(x) = self {
-			Ok(x)
-		} else {
-			Err(Error {
-				span,
-				msg: format!("'{}' is not a number", self),
-			})
-		}
-	}
 }
 
 impl std::fmt::Display for Iota {
