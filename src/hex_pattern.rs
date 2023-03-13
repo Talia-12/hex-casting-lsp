@@ -1,10 +1,9 @@
 use std::{ops::{Add, Sub}, f32::consts::TAU};
 
-use chumsky::primitive::todo;
 use num_derive::{FromPrimitive, ToPrimitive};    
 use num_traits::{FromPrimitive, ToPrimitive};
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 pub enum HexError {
 	Overlap,
 	InvalidString,

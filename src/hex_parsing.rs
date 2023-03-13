@@ -95,7 +95,16 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 	// A parser for bookkeeper's gambit
 	let bookkeeper = one_of("-v").repeated().at_least(1).collect().map(Token::Bookkeepers);
 
-	let hexdirs = one_of("aqweds").repeated().at_least(1).collect().map(Token::HexDirs);
+	let hexdirs = ident().try_map(|str, span| {
+		if str.len() == 0 {
+			return Err(Simple::expected_input_found(span, Vec::new(), Some(' ')))
+		}
+
+		println!("asdf");
+		dbg!(&str);
+
+		return if str.chars().all(|c| "aqweds".contains(c)) { Ok(str) } else { Err(Simple::expected_input_found(span, Vec::new(), Some(str.chars().find(|&c| !"aqweds".contains(c)).unwrap()))) } 
+	}).map(Token::HexDirs);
 
 	// A parser for identifiers and keywords
 	let ident = ident().map(|ident: String| match ident.as_str() {
@@ -328,6 +337,22 @@ pub fn parse(
 						.unwrap(),
 				}),
 				Token::Ctrl(_) => None,
+				Token::HexAbsoluteDir(_) => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+						.iter()
+						.position(|item| item == &SemanticTokenType::ENUM_MEMBER)
+						.unwrap(),
+				}),
+				Token::HexDirs(_) => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+						.iter()
+						.position(|item| item == &SemanticTokenType::ENUM_MEMBER)
+						.unwrap(),
+				}),
 				Token::Ident(_) => None,
 				Token::Comment(_) => Some(ImCompleteSemanticToken {
 					start: span.start,
@@ -423,22 +448,25 @@ pub fn parse(
 
 // string to HexPattern
 pub fn hex_pattern_from_signature() -> impl Parser<Token, (HexPattern, Span), Error = Simple<Token>> {
-	let pattern = filter_map(|span, tok| match tok {
-			Token::HexAbsoluteDir(absdir) => Ok(absdir),
+	let pattern = filter_map(|span: Span, tok| match tok {
+			Token::HexAbsoluteDir(absdir) => Ok((span, absdir)),
 			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
 		})
-		.then_ignore(just(Token::Ctrl(','))) //.or(empty())
+		.then_ignore(just(Token::Ctrl(',')).or_not())
 		.then(filter_map(|span, tok| match tok {
-			Token::HexDirs(dirs) => Ok(HexDir::from_str(&dirs)),
+			Token::HexDirs(dirs) => Ok((span, HexDir::from_str(&dirs))),
 			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
 		}))
-		.map(|(start_dir, dirs)| HexPattern::new(start_dir, dirs));
+		.try_map(|((start_span, start_dir), (dirs_span, dirs)), span|
+			HexPattern::new(start_dir, dirs).map(|pat| (pat, start_span.start()..dirs_span.end())).map_err(|err| Simple::expected_input_found(span, Vec::new(), Some(Token::Arrow))) // TODO: hackyy
+		);
 
 	pattern
 }
 
-pub fn hex_pattern_from_name() ->  impl Parser<Token, (HexPattern, Span), Error = Simple<Token>> {
-	let name = filter_map(|span, tok| match tok {
+// pub fn hex_pattern_from_name() -> impl Parser<Token, (HexPattern, Span), Error = Simple<Token>> {
+pub fn hex_pattern_from_name() {
+	let name = filter_map(|span: Span, tok| match tok {
 			Token::Num(n) => Ok(n),
 			Token::Ident(name_part) => Ok(name_part),
 			Token::Bookkeepers(name_part) => Ok(name_part),
@@ -448,7 +476,7 @@ pub fn hex_pattern_from_name() ->  impl Parser<Token, (HexPattern, Span), Error 
 		.repeated()
 		.at_least(1)
 		.labelled("value")
-		.map(|strings| strings.iter().fold("".to_string(), |acc, str| { acc.push_str(str); acc}));
+		.map(|strings| strings.iter().fold("".to_string(), |mut acc, str| { acc.push_str(str); acc}));
 
 	todo!()
 }
@@ -540,7 +568,7 @@ return vec![
 				Token::Ctrl('}')],
 			vec![
 				Token::Ctrl('#'), Token::Define, Token::Ident("New".to_string()), Token::Ident("Distillation".to_string()),
-					Token::Ctrl('('), Token::Ident("SOUTHEAST".to_string()), Token::Ident("aqwed".to_string()), Token::Ctrl(')'),
+					Token::Ctrl('('), Token::HexAbsoluteDir(HexAbsoluteDir::SouthEast), Token::HexDirs("aqwed".to_string()), Token::Ctrl(')'),
 					Token::Ctrl('='), Token::Ident("int".to_string()), Token::Ctrl(','), Token::Ident("int".to_string()), Token::Arrow, Token::Ident("int".to_string()),  Token::Ctrl('{'),  Token::Ctrl('\n'),
 					Token::Ident("Bookkeeper's".to_string()), Token::Ident("Gambit".to_string()), Token::Ctrl(':'), Token::Bookkeepers("v-".to_string()), Token::Ctrl('\n'),
 				Token::Ctrl('}'), Token::Ctrl('\n'),
@@ -567,7 +595,11 @@ return vec![
 		];
 
 		for (input, output) in inputs.iter().zip(outputs) {
-			assert_eq!(hex_pattern_from_signature(*input), output)
+			let tokens = lexer().parse(*input).unwrap().into_iter().map(|(token, _span)| token).collect::<Vec<_>>();
+			dbg!(&tokens);
+			let (pattern, _span) = hex_pattern_from_signature().parse(tokens).unwrap();
+
+			assert_eq!(pattern, output.unwrap());
 		}
 	}
 }
