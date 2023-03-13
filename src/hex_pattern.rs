@@ -1,20 +1,42 @@
 use std::{ops::{Add, Sub}, f32::consts::TAU};
 
+use chumsky::primitive::todo;
 use num_derive::{FromPrimitive, ToPrimitive};    
 use num_traits::{FromPrimitive, ToPrimitive};
-
-use egui::{Pos2, pos2, Vec2};
 
 #[derive(PartialEq, Debug)]
 pub enum HexError {
 	Overlap,
-	InvalidString
+	InvalidString,
+	UnkownPatternName
+}
+
+pub struct Vec2 {
+	pub x: f32,
+	pub y: f32,
+}
+
+impl Vec2 {
+	pub fn new(x: f32, y: f32) -> Vec2 {
+    Vec2 { x, y }
+	}
+	
+	#[inline(always)]
+	pub fn angle(&self) -> f32 {
+		self.y.atan2(self.x)
+	}
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Clone)]
 pub struct HexPattern {
 	pub start_dir: HexAbsoluteDir,
 	pub pattern_vec: Vec<HexDir>
+}
+
+impl std::fmt::Display for HexPattern {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "HexPattern({}, {})", self.start_dir, self.pattern_vec.iter().map(|it| it.letter()).collect::<String>())
+	}
 }
 
 impl HexPattern {
@@ -50,7 +72,7 @@ impl HexPattern {
 		}
 	}
 	
-	pub fn hex_pattern(start_dir: HexAbsoluteDir, pattern_vec: Vec<HexDir>) -> Result<HexPattern, HexError> {
+	pub fn new(start_dir: HexAbsoluteDir, pattern_vec: Vec<HexDir>) -> Result<HexPattern, HexError> {
 		let pattern = HexPattern { start_dir, pattern_vec };
 		
 		if HexPattern::check_for_overlap(&pattern.to_coords()) {
@@ -83,7 +105,8 @@ pub enum HexDir {
 		Q,
 		W,
 		E,
-		D
+		D,
+		S,
 }
 
 impl HexDir {
@@ -95,13 +118,37 @@ impl HexDir {
 			HexDir::W => prev_dir,
 			HexDir::E => prev_dir.turn(1),
 			HexDir::D => prev_dir.turn(2),
+			HexDir::S => prev_dir.turn(3),
 		};
 
 		return (prev_coord + new_dir.coord_offset(), new_dir);
 	}
+
+	fn letter(&self) -> char {
+		match self {
+			HexDir::A => 'a',
+			HexDir::Q => 'q',
+			HexDir::W => 'w',
+			HexDir::E => 'e',
+			HexDir::D => 'd',
+			HexDir::S => 's',
+		}
+	}
+
+	pub fn from_str(str: &str) -> Vec<HexDir> {
+		str.chars().filter_map(|c| match c {
+			 'a' => Some(HexDir::A),
+			 'q' => Some(HexDir::Q),
+			 'w' => Some(HexDir::W),
+			 'e' => Some(HexDir::E),
+			 'd' => Some(HexDir::D),
+			 's' => Some(HexDir::S),
+			 _ => None
+		}).collect()
+	}
 }
 
-#[derive(serde::Deserialize, serde::Serialize, PartialEq, ToPrimitive, FromPrimitive, Clone, Copy, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Eq, Hash, ToPrimitive, FromPrimitive, Clone, Copy, Debug)]
 pub enum HexAbsoluteDir {
 	East,
 	SouthEast,
@@ -109,6 +156,19 @@ pub enum HexAbsoluteDir {
 	West,
 	NorthWest,
 	NorthEast
+}
+
+impl std::fmt::Display for HexAbsoluteDir {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			HexAbsoluteDir::East => write!(f, "EAST"),
+			HexAbsoluteDir::SouthEast => write!(f, "SOUTH_EAST"),
+			HexAbsoluteDir::SouthWest => write!(f, "SOUTH_WEST"),
+			HexAbsoluteDir::West => write!(f, "WEST"),
+			HexAbsoluteDir::NorthWest => write!(f, "NORTH_WEST"),
+			HexAbsoluteDir::NorthEast => write!(f, "NORTH_EAST"),
+		}
+	}
 }
 
 impl HexAbsoluteDir {
@@ -187,6 +247,18 @@ impl HexAbsoluteDir {
 			(HexAbsoluteDir::NorthEast, HexAbsoluteDir::NorthEast) => Some(HexDir::W),
 		}
 	}
+
+	pub fn from_str(str: &str) -> Option<Self> {
+		match str.to_uppercase().chars().filter(|c| c != &'_').collect::<String>().as_str() {
+			"EAST" => Some(HexAbsoluteDir::East),
+			"SOUTHEAST" => Some(HexAbsoluteDir::SouthEast),
+			"SOUTHWEST" => Some(HexAbsoluteDir::SouthWest),
+			"WEST" => Some(HexAbsoluteDir::West),
+			"NORTHWEST" => Some(HexAbsoluteDir::NorthWest),
+			"NORTHEAST" => Some(HexAbsoluteDir::NorthEast),
+			_ => None
+		}
+	}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -196,10 +268,10 @@ pub struct HexCoord {
 }
 
 impl HexCoord {
-	pub fn to_cartesian(&self) -> Pos2 {
+	pub fn to_cartesian(&self) -> Vec2 {
 		let q = self.q as f32;
 		let r = self.r as f32;
-		return pos2(3.0_f32.sqrt() * q + 3.0_f32.sqrt()/2.0 * r, 3.0/2.0 * r);
+		return Vec2::new(3.0_f32.sqrt() * q + 3.0_f32.sqrt()/2.0 * r, 3.0/2.0 * r);
 	}
 
 	// pub fn dir_to(&self, other: HexCoord) -> Option<HexAbsoluteDir> {
@@ -214,9 +286,9 @@ impl HexCoord {
 	// 	}
 	// }
 
-	pub fn from_cartesian(pos: Pos2) -> HexCoord {
-		let fq = 3.0_f32.sqrt()/3.0 * pos.x - 1.0/3.0 * pos.y;
-		let fr = 2.0/3.0 * pos.y;
+	pub fn from_cartesian(vec: Vec2) -> HexCoord {
+		let fq = 3.0_f32.sqrt()/3.0 * vec.x - 1.0/3.0 * vec.y;
+		let fr = 2.0/3.0 * vec.y;
 		return HexCoord::round(fq, fr)
 	}
 

@@ -1,13 +1,14 @@
 use chumsky::Parser;
-use chumsky::primitive::custom;
-use chumsky::text::Padding;
-use chumsky::{prelude::*, stream::Stream};
+use chumsky::prelude::*;
 use core::fmt;
-use std::{collections::HashMap};
-use tower_lsp::lsp_types::{SemanticTokenType};
+use std::collections::HashMap;
+use tower_lsp::lsp_types::SemanticTokenType;
 
+use crate::hex_pattern::HexAbsoluteDir;
+use crate::hex_pattern::HexDir;
+use crate::hex_pattern::HexPattern;
 use crate::iota_types::Iota;
-use crate::semantic_token::{LEGEND_TYPE};
+use crate::semantic_token::LEGEND_TYPE;
 
 /// This is the parser and interpreter for the 'Foo' language. See `tutorial.md` in the repository's root to learn
 /// about it.
@@ -25,9 +26,12 @@ pub enum Token {
 	Num(String),
 	Str(String),
 	Ctrl(char),
+	HexAbsoluteDir(HexAbsoluteDir),
+	HexDirs(String),
 	Ident(String),
 	Comment(String),
 	Entity,
+	Import,
 	Define,
 	Arrow,
 	Bookkeepers(String),
@@ -41,12 +45,15 @@ impl fmt::Display for Token {
 			Token::Num(n) => write!(f, "{}", n),
 			Token::Str(s) => write!(f, "{}", s),
 			Token::Ctrl(c) => write!(f, "{}", c),
+			Token::HexAbsoluteDir(dir) => write!(f, "{}", dir),
+			Token::HexDirs(dirs) => write!(f, "{}", dirs),
 			Token::Ident(s) => write!(f, "{}", s),
 			Token::Comment(s) => write!(f, "{}", s),
     	Token::Entity => write!(f, "Entity"),
+			Token::Import => write!(f, "import"),
     	Token::Define => write!(f, "define"),
     	Token::Arrow => write!(f, "->"),
-    Token::Bookkeepers(s) => write!(f, "{}", s),
+			Token::Bookkeepers(s) => write!(f, "{}", s),
 		}
 	}
 }
@@ -60,7 +67,7 @@ fn ident() -> impl Parser<char, String, Error = Simple<char>> + Copy + Clone
 	filter(|c: &char| c.is_ascii_alphabetic() || c == &'_')
 		.map(Some)
 		.chain::<char, Vec<_>, _>(
-			filter(|c: &char| c.is_ascii_alphanumeric() || c == &'_' || c == &'\'').repeated(),
+			filter(|c: &char| c.is_ascii_alphanumeric() || c == &'_' || c == &'\'' || c == &'-').repeated(),
 		)
 		.collect()
 }
@@ -88,6 +95,8 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 	// A parser for bookkeeper's gambit
 	let bookkeeper = one_of("-v").repeated().at_least(1).collect().map(Token::Bookkeepers);
 
+	let hexdirs = one_of("aqweds").repeated().at_least(1).collect().map(Token::HexDirs);
+
 	// A parser for identifiers and keywords
 	let ident = ident().map(|ident: String| match ident.as_str() {
 		"true" => Token::Bool(true),
@@ -95,7 +104,7 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 		"null" => Token::Null,
 		"Entity" => Token::Entity,
 		"define" => Token::Define, // #define Pattern Name (DIR aqwed) = a -> b
-		_ => Token::Ident(ident),
+		_ => if let Some(absdir) = HexAbsoluteDir::from_str(&ident) { Token::HexAbsoluteDir(absdir) } else { Token::Ident(ident) },
 	});
 
 	let single_comment = just("//").then(none_of("\n").repeated())
@@ -116,6 +125,7 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 		.or(ctrl)
 		.or(ops)
 		.or(bookkeeper)
+		.or(hexdirs)
 		.or(ident)
 		.or(single_comment)
 		.or(multi_comment)
@@ -198,12 +208,6 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 				_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
 			})
 			.labelled("value");
-
-			let ident = filter_map(|span: Span, tok| match tok {
-				Token::Ident(ident) => Ok((ident.clone(), span)),
-				_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-			})
-			.labelled("identifier");
 
 			// A list of expressions
 			let items = expr
@@ -341,7 +345,7 @@ pub fn parse(
 							.position(|item| item == &SemanticTokenType::KEYWORD)
 							.unwrap(),
 				}),
-				Token::Define =>  Some(ImCompleteSemanticToken {
+    		Token::Import => Some(ImCompleteSemanticToken {
 					start: span.start,
 					length: span.len(),
 					token_type: LEGEND_TYPE
@@ -349,7 +353,15 @@ pub fn parse(
 							.position(|item| item == &SemanticTokenType::KEYWORD)
 							.unwrap(),
 				}),
-				Token::Arrow =>  Some(ImCompleteSemanticToken {
+				Token::Define => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+							.iter()
+							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.unwrap(),
+				}),
+				Token::Arrow => Some(ImCompleteSemanticToken {
 					start: span.start,
 					length: span.len(),
 					token_type: LEGEND_TYPE
@@ -409,9 +421,43 @@ pub fn parse(
 	// });
 }
 
+// string to HexPattern
+pub fn hex_pattern_from_signature() -> impl Parser<Token, (HexPattern, Span), Error = Simple<Token>> {
+	let pattern = filter_map(|span, tok| match tok {
+			Token::HexAbsoluteDir(absdir) => Ok(absdir),
+			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
+		})
+		.then_ignore(just(Token::Ctrl(','))) //.or(empty())
+		.then(filter_map(|span, tok| match tok {
+			Token::HexDirs(dirs) => Ok(HexDir::from_str(&dirs)),
+			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
+		}))
+		.map(|(start_dir, dirs)| HexPattern::new(start_dir, dirs));
+
+	pattern
+}
+
+pub fn hex_pattern_from_name() ->  impl Parser<Token, (HexPattern, Span), Error = Simple<Token>> {
+	let name = filter_map(|span, tok| match tok {
+			Token::Num(n) => Ok(n),
+			Token::Ident(name_part) => Ok(name_part),
+			Token::Bookkeepers(name_part) => Ok(name_part),
+			Token::Ctrl(name_part) => if name_part == ':' { Ok(name_part.to_string()) } else { Err(Simple::expected_input_found(span, Vec::new(), Some(tok))) }
+			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+		})
+		.repeated()
+		.at_least(1)
+		.labelled("value")
+		.map(|strings| strings.iter().fold("".to_string(), |acc, str| { acc.push_str(str); acc}));
+
+	todo!()
+}
+
 #[cfg(test)]
 mod test {
-	use super::*;
+	use crate::hex_pattern::{HexAbsoluteDir, HexDir};
+
+use super::*;
 
 	fn test_inputs() -> Vec<String> {
 return vec![
@@ -509,6 +555,19 @@ return vec![
 
 		for (test_input, test_output) in test_inputs.iter().zip(test_outputs) {
 			assert_eq!(lexer().parse_recovery(test_input.as_str()).0.unwrap().iter().map(|(token, _range)| token.clone()).collect::<Vec<_>>(), test_output);
+		}
+	}
+
+	#[test]
+	fn test_hex_pattern_from_signature() {
+		let inputs = vec!["SOUTHWEST aqweqa", "North_east, qaq"];
+		let outputs = vec![
+			HexPattern::new(HexAbsoluteDir::SouthWest, vec![HexDir::A, HexDir::Q, HexDir::W, HexDir::E, HexDir::Q, HexDir::A]),
+			HexPattern::new(HexAbsoluteDir::NorthEast, vec![HexDir::Q, HexDir::A, HexDir::Q])
+		];
+
+		for (input, output) in inputs.iter().zip(outputs) {
+			assert_eq!(hex_pattern_from_signature(*input), output)
 		}
 	}
 }

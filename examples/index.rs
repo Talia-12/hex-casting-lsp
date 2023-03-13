@@ -1,7 +1,4 @@
-use std::collections::HashMap;
-
-use im_rc::Vector;
-use nrs_language_server::hex_parsing::{parse};
+use nrs_language_server::hex_parsing::parse;
 
 fn main() {
     let source = include_str!("test.nrs");
