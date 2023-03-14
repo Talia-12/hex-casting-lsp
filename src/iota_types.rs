@@ -13,13 +13,14 @@ pub enum Iota {
 	Vec3((f64, f64, f64)),
 	Str(String),
 	Matrix(Vec<Vec<f64>>),
-	IotaType(String),
+	IotaType(IotaType),
 	EntityType(String),
 	ItemType(String),
 	Gate(String),
-	ItemMote { name: String, count: u128 },
+	Mote { id: usize },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IotaType {
 	Null,
 	Num,
@@ -34,7 +35,7 @@ pub enum IotaType {
 	EntityType,
 	ItemType,
 	Gate,
-	ItemMote
+	Mote
 }
 
 impl Iota {
@@ -53,7 +54,7 @@ impl Iota {
 			Iota::EntityType(_) => IotaType::Entity,
 			Iota::ItemType(_) => IotaType::ItemType,
 			Iota::Gate(_) => IotaType::Gate,
-			Iota::ItemMote { name, count } => IotaType::ItemMote,
+			Iota::Mote { id } => IotaType::Mote,
 		}
 	}
 }
@@ -81,7 +82,7 @@ impl std::fmt::Display for Iota {
 			Self::EntityType(_) => todo!(),
 			Self::ItemType(_) => todo!(),
 			Self::Gate(_) => todo!(),
-			Self::ItemMote { name, count } => todo!(),
+			Self::Mote { id } => todo!(),
 		}
 	}
 }

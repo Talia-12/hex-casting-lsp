@@ -26,7 +26,7 @@ impl Vec2 {
 	}
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Clone)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct HexPattern {
 	pub start_dir: HexAbsoluteDir,
 	pub pattern_vec: Vec<HexDir>
@@ -71,14 +71,8 @@ impl HexPattern {
 		}
 	}
 	
-	pub fn new(start_dir: HexAbsoluteDir, pattern_vec: Vec<HexDir>) -> Result<HexPattern, HexError> {
-		let pattern = HexPattern { start_dir, pattern_vec };
-		
-		if HexPattern::check_for_overlap(&pattern.to_coords()) {
-			return Err(HexError::Overlap)
-		}
-	
-		return Ok(pattern)
+	pub fn new(start_dir: HexAbsoluteDir, pattern_vec: Vec<HexDir>) -> HexPattern {
+		HexPattern { start_dir, pattern_vec }
 	}
 	
 	fn check_for_overlap(coords: &Vec<HexCoord>) -> bool {
@@ -98,7 +92,7 @@ impl HexPattern {
 	}
 }
 
-#[derive(serde::Deserialize, serde::Serialize, PartialEq, Debug, Clone, Copy)]
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Eq, Debug, Clone, Copy)]
 pub enum HexDir {
 		A,
 		Q,

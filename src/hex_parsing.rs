@@ -28,13 +28,19 @@ pub enum Token {
 	Ctrl(char),
 	HexAbsoluteDir(HexAbsoluteDir),
 	HexDirs(String),
+	Bookkeepers(String),
 	Ident(String),
 	Comment(String),
 	Entity,
+	Matrix,
+	IotaType,
+	EntityType,
+	ItemType,
+	Gate,
+	Mote,
 	Import,
 	Define,
 	Arrow,
-	Bookkeepers(String),
 }
 
 impl fmt::Display for Token {
@@ -47,13 +53,19 @@ impl fmt::Display for Token {
 			Token::Ctrl(c) => write!(f, "{}", c),
 			Token::HexAbsoluteDir(dir) => write!(f, "{}", dir),
 			Token::HexDirs(dirs) => write!(f, "{}", dirs),
+			Token::Bookkeepers(s) => write!(f, "{}", s),
 			Token::Ident(s) => write!(f, "{}", s),
 			Token::Comment(s) => write!(f, "{}", s),
     	Token::Entity => write!(f, "Entity"),
+			Token::Matrix => write!(f, "Matrix"),
+			Token::IotaType => write!(f, "IotaType"),
+			Token::EntityType => write!(f, "EntityType"),
+			Token::ItemType => write!(f, "ItemType"),
+			Token::Gate => write!(f, "Gate"),
+			Token::Mote => write!(f, "Mote"),
 			Token::Import => write!(f, "import"),
     	Token::Define => write!(f, "define"),
     	Token::Arrow => write!(f, "->"),
-			Token::Bookkeepers(s) => write!(f, "{}", s),
 		}
 	}
 }
@@ -100,9 +112,6 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 			return Err(Simple::expected_input_found(span, Vec::new(), Some(' ')))
 		}
 
-		println!("asdf");
-		dbg!(&str);
-
 		return if str.chars().all(|c| "aqweds".contains(c)) { Ok(str) } else { Err(Simple::expected_input_found(span, Vec::new(), Some(str.chars().find(|&c| !"aqweds".contains(c)).unwrap()))) } 
 	}).map(Token::HexDirs);
 
@@ -112,6 +121,12 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 		"false" => Token::Bool(false),
 		"null" => Token::Null,
 		"Entity" => Token::Entity,
+		"Matrix" => Token::Matrix,
+		"IotaType" => Token::IotaType,
+		"EntityType" => Token::EntityType,
+		"ItemType" => Token::ItemType,
+		"Gate" => Token::Gate,
+		"Mote" => Token::Mote,
 		"define" => Token::Define, // #define Pattern Name (DIR aqwed) = a -> b
 		_ => if let Some(absdir) = HexAbsoluteDir::from_str(&ident) { Token::HexAbsoluteDir(absdir) } else { Token::Ident(ident) },
 	});
@@ -206,6 +221,44 @@ pub struct Func {
 	pub span: Span,
 }
 
+// string to HexPattern
+fn hex_pattern_from_signature() -> impl Parser<Token, (HexPattern, Span), Error = Simple<Token>> {
+	let pattern = filter_map(|span: Span, tok| match tok {
+			Token::HexAbsoluteDir(absdir) => Ok((span, absdir)),
+			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
+		})
+		.then_ignore(just(Token::Ctrl(',')).or_not())
+		.then(filter_map(|span, tok| match tok {
+			Token::HexDirs(dirs) => Ok((span, HexDir::from_str(&dirs))),
+			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
+		}))
+		.map(|((start_span, start_dir), (dirs_span, dirs))|
+			(HexPattern::new(start_dir, dirs), start_span.start()..dirs_span.end())
+		);
+
+	// make it so that it can parse HexPattern(DIR, DIRS) or just DIR, DIRS, or even DIR DIRS
+	just(Token::Ident("HexPattern".to_string()))
+		.ignore_then(pattern.clone().delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')'))))
+		.or(pattern)
+}
+
+// consumes a pattern name AND A NEWLINE TOKEN
+fn hex_pattern_from_name() -> impl Parser<Token, (HexPattern, Span), Error = Simple<Token>> {
+	let name = filter_map(|span: Span, tok| match tok {
+			Token::Num(n) => Ok(n),
+			Token::Ident(name_part) => Ok(name_part),
+			Token::Bookkeepers(name_part) => Ok(name_part),
+			Token::Ctrl(name_part) => if name_part == ':' { Ok(name_part.to_string()) } else { Err(Simple::expected_input_found(span, Vec::new(), Some(tok))) }
+			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+		})
+		.repeated()
+		.at_least(1)
+		.labelled("value")
+		.map(|strings| strings.iter().fold("".to_string(), |mut acc, str| { acc.push_str(str); acc}));
+
+	todo().then_ignore(just(Token::Ctrl('\n')))
+}
+
 fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
 	recursive(|expr| {
 		let raw_expr = recursive(|raw_expr| {
@@ -216,7 +269,14 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 				Token::Str(s) => Ok(Expr::Value(Iota::Str(s))),
 				_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
 			})
-			.labelled("value");
+			.labelled("simple_iota");
+
+		let pattern = hex_pattern_from_signature().or(hex_pattern_from_name());
+
+		let entity = just(Token::Entity).ignore_then(filter_map(|span: Span, tok| match tok {
+			Token::Ident(name) => Ok(Expr::Value(Iota::Entity(name))),
+			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+		}));
 
 			// A list of expressions
 			let items = expr
@@ -353,6 +413,14 @@ pub fn parse(
 						.position(|item| item == &SemanticTokenType::ENUM_MEMBER)
 						.unwrap(),
 				}),
+				Token::Bookkeepers(_) => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+							.iter()
+							.position(|item| item == &SemanticTokenType::PARAMETER)
+							.unwrap(),
+				}),
 				Token::Ident(_) => None,
 				Token::Comment(_) => Some(ImCompleteSemanticToken {
 					start: span.start,
@@ -363,6 +431,54 @@ pub fn parse(
 							.unwrap(),
 				}),
 				Token::Entity => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+							.iter()
+							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.unwrap(),
+				}),
+				Token::Matrix => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+							.iter()
+							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.unwrap(),
+				}),
+				Token::IotaType => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+							.iter()
+							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.unwrap(),
+				}),
+				Token::EntityType => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+							.iter()
+							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.unwrap(),
+				}),
+				Token::ItemType => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+							.iter()
+							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.unwrap(),
+				}),
+				Token::Gate => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+							.iter()
+							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.unwrap(),
+				}),
+				Token::Mote => Some(ImCompleteSemanticToken {
 					start: span.start,
 					length: span.len(),
 					token_type: LEGEND_TYPE
@@ -392,14 +508,6 @@ pub fn parse(
 					token_type: LEGEND_TYPE
 							.iter()
 							.position(|item| item == &SemanticTokenType::OPERATOR)
-							.unwrap(),
-				}),
-				Token::Bookkeepers(_) => Some(ImCompleteSemanticToken {
-					start: span.start,
-					length: span.len(),
-					token_type: LEGEND_TYPE
-							.iter()
-							.position(|item| item == &SemanticTokenType::PARAMETER)
 							.unwrap(),
 				}),
 			})
@@ -444,41 +552,6 @@ pub fn parse(
 	//         chumsky::error::SimpleReason::Custom(msg) => {}
 	//     };
 	// });
-}
-
-// string to HexPattern
-pub fn hex_pattern_from_signature() -> impl Parser<Token, (HexPattern, Span), Error = Simple<Token>> {
-	let pattern = filter_map(|span: Span, tok| match tok {
-			Token::HexAbsoluteDir(absdir) => Ok((span, absdir)),
-			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
-		})
-		.then_ignore(just(Token::Ctrl(',')).or_not())
-		.then(filter_map(|span, tok| match tok {
-			Token::HexDirs(dirs) => Ok((span, HexDir::from_str(&dirs))),
-			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
-		}))
-		.try_map(|((start_span, start_dir), (dirs_span, dirs)), span|
-			HexPattern::new(start_dir, dirs).map(|pat| (pat, start_span.start()..dirs_span.end())).map_err(|err| Simple::expected_input_found(span, Vec::new(), Some(Token::Arrow))) // TODO: hackyy
-		);
-
-	pattern
-}
-
-// pub fn hex_pattern_from_name() -> impl Parser<Token, (HexPattern, Span), Error = Simple<Token>> {
-pub fn hex_pattern_from_name() {
-	let name = filter_map(|span: Span, tok| match tok {
-			Token::Num(n) => Ok(n),
-			Token::Ident(name_part) => Ok(name_part),
-			Token::Bookkeepers(name_part) => Ok(name_part),
-			Token::Ctrl(name_part) => if name_part == ':' { Ok(name_part.to_string()) } else { Err(Simple::expected_input_found(span, Vec::new(), Some(tok))) }
-			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-		})
-		.repeated()
-		.at_least(1)
-		.labelled("value")
-		.map(|strings| strings.iter().fold("".to_string(), |mut acc, str| { acc.push_str(str); acc}));
-
-	todo!()
 }
 
 #[cfg(test)]
@@ -588,10 +661,11 @@ return vec![
 
 	#[test]
 	fn test_hex_pattern_from_signature() {
-		let inputs = vec!["SOUTHWEST aqweqa", "North_east, qaq"];
+		let inputs = vec!["SOUTHWEST aqweqa", "North_east, qaq", "HexPattern(NORTHWEST, asd)"];
 		let outputs = vec![
 			HexPattern::new(HexAbsoluteDir::SouthWest, vec![HexDir::A, HexDir::Q, HexDir::W, HexDir::E, HexDir::Q, HexDir::A]),
-			HexPattern::new(HexAbsoluteDir::NorthEast, vec![HexDir::Q, HexDir::A, HexDir::Q])
+			HexPattern::new(HexAbsoluteDir::NorthEast, vec![HexDir::Q, HexDir::A, HexDir::Q]),
+			HexPattern::new(HexAbsoluteDir::NorthWest, vec![HexDir::A, HexDir::S, HexDir::D])
 		];
 
 		for (input, output) in inputs.iter().zip(outputs) {
@@ -599,7 +673,7 @@ return vec![
 			dbg!(&tokens);
 			let (pattern, _span) = hex_pattern_from_signature().parse(tokens).unwrap();
 
-			assert_eq!(pattern, output.unwrap());
+			assert_eq!(pattern, output);
 		}
 	}
 }
