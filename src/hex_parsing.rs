@@ -1,13 +1,16 @@
 use chumsky::Parser;
 use chumsky::prelude::*;
+use nalgebra::DMatrix;
 use core::fmt;
 use std::collections::HashMap;
+use std::iter;
 use tower_lsp::lsp_types::SemanticTokenType;
 
 use crate::hex_pattern::HexAbsoluteDir;
 use crate::hex_pattern::HexDir;
 use crate::hex_pattern::HexPattern;
 use crate::iota_types::Iota;
+use crate::matrix_helpers::vecs_to_dyn_matrix;
 use crate::semantic_token::LEGEND_TYPE;
 
 /// This is the parser and interpreter for the 'Foo' language. See `tutorial.md` in the repository's root to learn
@@ -99,7 +102,7 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 		.map(Token::Str);
 
 	// A parser for control characters (delimiters, colons, etc.)
-	let ctrl = one_of("()[]{},:#=\n").map(|c| Token::Ctrl(c));
+	let ctrl = one_of("()[]{},;:#=\n").map(|c| Token::Ctrl(c));
 
 	// A parser for ops
 	let ops = just("->").map(|_| Token::Arrow);
@@ -271,12 +274,25 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 			})
 			.labelled("simple_iota");
 
-		let pattern = hex_pattern_from_signature().or(hex_pattern_from_name());
+			let pattern = hex_pattern_from_signature().or(hex_pattern_from_name());
 
-		let entity = just(Token::Entity).ignore_then(filter_map(|span: Span, tok| match tok {
-			Token::Ident(name) => Ok(Expr::Value(Iota::Entity(name))),
-			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-		}));
+			let entity = just(Token::Entity).ignore_then(filter_map(|span: Span, tok| match tok {
+				Token::Ident(name) => Ok(Expr::Value(Iota::Entity(name))),
+				_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+			}).delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')'))));
+
+			let matrix = just(Token::Matrix).ignore_then(
+				filter_map(|span: Span, tok| match tok {
+					Token::Num(n) => Ok(n.parse::<f64>().unwrap()),
+					_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+				}).separated_by(just(Token::Ctrl(','))).separated_by(just(Token::Ctrl(';'))).try_map(|vecvec, span| {
+					let maybe_dm = vecs_to_dyn_matrix(vecvec);
+
+					maybe_dm
+						.map(|dm| Expr::Value(Iota::Matrix(dm)))
+						.ok_or_else(|| Simple::expected_input_found(span, vec![Some(Token::Ident("A matrix with each row and column containing the same number of entries.".to_string()))], Some(Token::Ctrl(';'))))
+				}).delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+			);
 
 			// A list of expressions
 			let items = expr

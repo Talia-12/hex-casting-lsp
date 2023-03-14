@@ -1,3 +1,4 @@
+use nalgebra::DMatrix;
 use serde::{Serialize, Deserialize};
 
 use crate::hex_pattern::HexPattern;
@@ -12,7 +13,7 @@ pub enum Iota {
 	Pattern(HexPattern),
 	Vec3((f64, f64, f64)),
 	Str(String),
-	Matrix(Vec<Vec<f64>>),
+	Matrix(DMatrix<f64>),
 	IotaType(IotaType),
 	EntityType(String),
 	ItemType(String),

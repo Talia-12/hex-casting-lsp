@@ -18,5 +18,6 @@ log = "0.4.14"
 im-rc = "15.0.0"
 num-derive = "0.3.3"
 num-traits = "0.2.15"
+nalgebra = { version = "0.32.2", features = ["serde-serialize"] }
 
 
