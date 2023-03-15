@@ -256,7 +256,7 @@ fn hex_pattern_from_name() -> impl Parser<Token, (HexPattern, Span), Error = Sim
 		})
 		.repeated()
 		.at_least(1)
-		.labelled("value")
+		.labelled("pattern name")
 		.map(|strings| strings.iter().fold("".to_string(), |mut acc, str| { acc.push_str(str); acc}));
 
 	todo().then_ignore(just(Token::Ctrl('\n')))

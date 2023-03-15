@@ -433,6 +433,7 @@ dependencies = [
  "nalgebra",
  "num-derive",
  "num-traits",
+ "once_cell",
  "ropey",
  "serde",
  "serde_json",
