@@ -26,7 +26,7 @@ impl Vec2 {
 	}
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq, Clone)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct HexPattern {
 	pub start_dir: HexAbsoluteDir,
 	pub pattern_vec: Vec<HexDir>
@@ -92,7 +92,7 @@ impl HexPattern {
 	}
 }
 
-#[derive(serde::Deserialize, serde::Serialize, PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(serde::Deserialize, serde::Serialize, PartialEq, Eq, Hash, Debug, Clone, Copy)]
 pub enum HexDir {
 		A,
 		Q,

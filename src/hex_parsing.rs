@@ -1,9 +1,7 @@
 use chumsky::Parser;
 use chumsky::prelude::*;
-use nalgebra::DMatrix;
 use core::fmt;
 use std::collections::HashMap;
-use std::iter;
 use tower_lsp::lsp_types::SemanticTokenType;
 
 use crate::hex_pattern::HexAbsoluteDir;
@@ -11,6 +9,8 @@ use crate::hex_pattern::HexDir;
 use crate::hex_pattern::HexPattern;
 use crate::iota_types::Iota;
 use crate::matrix_helpers::vecs_to_dyn_matrix;
+use crate::pattern_name_registry;
+use crate::pattern_name_registry::PatternNameRegistryError;
 use crate::semantic_token::LEGEND_TYPE;
 
 /// This is the parser and interpreter for the 'Foo' language. See `tutorial.md` in the repository's root to learn
@@ -68,7 +68,7 @@ impl fmt::Display for Token {
 			Token::Mote => write!(f, "Mote"),
 			Token::Import => write!(f, "import"),
     	Token::Define => write!(f, "define"),
-    	Token::Arrow => write!(f, "->"),
+    	Token::Arrow => write!(f, "\u{2192}"),
 		}
 	}
 }
@@ -82,7 +82,7 @@ fn ident() -> impl Parser<char, String, Error = Simple<char>> + Copy + Clone
 	filter(|c: &char| c.is_ascii_alphabetic() || c == &'_')
 		.map(Some)
 		.chain::<char, Vec<_>, _>(
-			filter(|c: &char| c.is_ascii_alphanumeric() || c == &'_' || c == &'\'' || c == &'-').repeated(),
+			filter(|c: &char| c.is_ascii_alphanumeric() || c == &'_' || c == &'/' || c == &'\'' || c == &'-').repeated(),
 		)
 		.collect()
 }
@@ -259,7 +259,12 @@ fn hex_pattern_from_name() -> impl Parser<Token, (HexPattern, Span), Error = Sim
 		.labelled("pattern name")
 		.map(|strings| strings.iter().fold("".to_string(), |mut acc, str| { acc.push_str(str); acc}));
 
-	todo().then_ignore(just(Token::Ctrl('\n')))
+	name.try_map(|name, span| {
+		pattern_name_registry::registry_entry_from_name(&name)
+			.and_then(|entry| {
+				entry.get_pattern().map(|pattern| (pattern, span.clone())).ok_or(&PatternNameRegistryError::NoPatternError)
+			}).map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
+	}).then_ignore(just(Token::Ctrl('\n')))
 }
 
 fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
