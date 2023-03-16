@@ -68,11 +68,11 @@ fn simple_registry_entry_from_pattern(pattern: &HexPattern) -> Result<StatOrDynR
 
 
 fn numeric_pattern_handler(pattern: &HexPattern) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
-	todo!()
+	Err(&PatternNameRegistryError::NoPatternError) // TODO
 }
 
 fn bookkeeper_pattern_handler(pattern: &HexPattern) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
-	todo!()
+	Err(&PatternNameRegistryError::NoPatternError) // TODO
 }
 
 pub fn registry_entry_from_pattern(pattern: &HexPattern) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
@@ -270,7 +270,7 @@ mod test {
 			},
 		];
 
-		assert_eq!(entries_by_name, expected_entries_vec.iter().map(|entry| (entry.name.clone(), entry.clone())).collect());
+		assert_eq!(entries_by_name, expected_entries_vec.iter().map(|entry| (entry.name.chars().filter(|&c| c != ' ').collect(), entry.clone())).collect());
 		assert_eq!(entries_by_id, expected_entries_vec.iter().map(|entry| (entry.id.clone(), entry.clone())).collect());
 		assert_eq!(entries_by_pattern, expected_entries_vec.iter().filter_map(|entry| entry.pattern.clone().map(|pat| (pat, entry.clone()))).collect());
 	}
