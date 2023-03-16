@@ -9,6 +9,10 @@ use crate::hex_pattern::{HexPattern, HexDir, HexAbsoluteDir};
 
 static REGISTRY: Lazy<Result<(HashMap<String, RegistryEntry>, HashMap<String, RegistryEntry>, HashMap<HexPattern, RegistryEntry>), PatternNameRegistryError>> = Lazy::new(|| get_registry_from_file("registry.json"));
 
+pub fn get_consideration() -> Result<StatOrDynRegistryEntry, &'static PatternNameRegistryError> {
+	registry_entry_from_id("escape")
+}
+
 fn simple_registry_entry_from_name(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
 	REGISTRY.as_ref().and_then(|(entries_by_name, _, _)| entries_by_name.get(name).map(|entry| StatOrDynRegistryEntry::StatRegistryEntry(entry)).ok_or(&PatternNameRegistryError::NoPatternError))
 }

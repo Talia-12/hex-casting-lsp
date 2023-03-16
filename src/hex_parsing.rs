@@ -1,14 +1,17 @@
 use chumsky::Parser;
 use chumsky::prelude::*;
+use num_traits::ToPrimitive;
 use core::fmt;
 use std::collections::HashMap;
 use tower_lsp::lsp_types::SemanticTokenType;
+use itertools::Itertools;
 
 use crate::hex_pattern::HexAbsoluteDir;
 use crate::hex_pattern::HexDir;
 use crate::hex_pattern::HexPattern;
 use crate::iota_types::HexPatternIota;
 use crate::iota_types::Iota;
+use crate::iota_types::IotaType;
 use crate::matrix_helpers::vecs_to_dyn_matrix;
 use crate::pattern_name_registry;
 use crate::pattern_name_registry::PatternNameRegistryError;
@@ -226,29 +229,27 @@ pub struct Func {
 }
 
 // string to HexPattern
-fn hex_pattern_from_signature() -> impl Parser<Token, (HexPatternIota, Span), Error = Simple<Token>> {
+fn hex_pattern_from_signature() -> impl Parser<Token, HexPatternIota, Error = Simple<Token>> + Clone {
 	let pattern = filter_map(|span: Span, tok| match tok {
-			Token::HexAbsoluteDir(absdir) => Ok((span, absdir)),
+			Token::HexAbsoluteDir(absdir) => Ok(absdir),
 			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
 		})
 		.then_ignore(just(Token::Ctrl(',')).or_not())
 		.then(filter_map(|span, tok| match tok {
-			Token::HexDirs(dirs) => Ok((span, HexDir::from_str(&dirs))),
+			Token::HexDirs(dirs) => Ok(HexDir::from_str(&dirs)),
 			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
 		}))
-		.map(|((start_span, start_dir), (dirs_span, dirs))|
-			(HexPattern::new(start_dir, dirs), start_span.start()..dirs_span.end())
-		);
+		.map(|(start_dir, dirs)| HexPattern::new(start_dir, dirs));
 
 	// make it so that it can parse HexPattern(DIR, DIRS) or just DIR, DIRS, or even DIR DIRS
 	just(Token::Ident("HexPattern".to_string()))
 		.ignore_then(pattern.clone().delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')'))))
 		.or(pattern)
-		.map(|(pattern, span): (HexPattern, Span)| (pattern.into(), span))
+		.map(|pattern| pattern.into())
 }
 
 // consumes a pattern name AND A NEWLINE TOKEN
-fn hex_pattern_from_name() -> impl Parser<Token, (HexPatternIota, Span), Error = Simple<Token>> {
+fn hex_pattern_from_name() -> impl Parser<Token, HexPatternIota, Error = Simple<Token>> + Clone {
 	let name = filter_map(|span: Span, tok| match tok {
 			Token::Num(n) => Ok(n),
 			Token::Ident(name_part) => Ok(name_part),
@@ -264,25 +265,43 @@ fn hex_pattern_from_name() -> impl Parser<Token, (HexPatternIota, Span), Error =
 	name.try_map(|name, span| {
 		pattern_name_registry::registry_entry_from_name(&name)
 			.and_then(|entry| {
-				entry.get_pattern().map(|pattern| (pattern, span.clone())).ok_or(&PatternNameRegistryError::NoPatternError)
+				entry.get_pattern().map(|pattern| pattern).ok_or(&PatternNameRegistryError::NoPatternError)
 			}).map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
 	}).then_ignore(just(Token::Ctrl('\n')))
-	.map(|(pattern, span): (HexPattern, Span)| (pattern.into(), span))
+	.map(|pattern| pattern.into())
 }
 
 fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
 	recursive(|expr| {
 		let raw_expr = recursive(|raw_expr| {
-			let val = filter_map(|span, tok| match tok {
+			let num = filter_map(|span: Span, tok| match tok {
+				Token::Num(n) => Ok(n.parse::<f64>().unwrap()),
+				_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+			}).labelled("num");
+
+			let pos_int = filter_map(|span: Span, tok| match tok {
+				Token::Num(n) => Ok(n.parse::<usize>().unwrap()),
+				_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+			}).labelled("pos_int");
+
+			let simple_iota = filter_map(|span, tok| match tok {
 				Token::Null => Ok(Expr::Value(Iota::Null)),
 				Token::Bool(x) => Ok(Expr::Value(Iota::Bool(x))),
-				Token::Num(n) => Ok(Expr::Value(Iota::Num(n.parse().unwrap()))),
+				Token::Num(x) => Ok(Expr::Value(Iota::Num(x.parse::<f64>().unwrap()))),
 				Token::Str(s) => Ok(Expr::Value(Iota::Str(s))),
 				_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
 			})
 			.labelled("simple_iota");
 
-			let pattern = hex_pattern_from_signature().or(hex_pattern_from_name());
+			let vec3 = num.clone().then(num.clone()).then(num.clone())
+				.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+				.map(|((x, y), z)| Expr::Value(Iota::Vec3(x, y, z)))
+				.labelled("vec3");
+
+			let pattern = hex_pattern_from_signature()
+				.or(hex_pattern_from_name())
+				.map(|pattern| Expr::Value(Iota::Pattern(pattern)))
+				.labelled("pattern");
 
 			let entity = just(Token::Entity).ignore_then(filter_map(|span: Span, tok| match tok {
 				Token::Ident(name) => Ok(Expr::Value(Iota::Entity(name))),
@@ -290,10 +309,7 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 			}).delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')'))));
 
 			let matrix = just(Token::Matrix).ignore_then(
-				filter_map(|span: Span, tok| match tok {
-					Token::Num(n) => Ok(n.parse::<f64>().unwrap()),
-					_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-				}).separated_by(just(Token::Ctrl(','))).separated_by(just(Token::Ctrl(';'))).try_map(|vecvec, span| {
+				num.clone().separated_by(just(Token::Ctrl(','))).separated_by(just(Token::Ctrl(';'))).try_map(|vecvec, span| {
 					let maybe_dm = vecs_to_dyn_matrix(vecvec);
 
 					maybe_dm
@@ -302,21 +318,92 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 				}).delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
 			);
 
+			let iota_type = just(Token::IotaType).ignore_then(
+				filter_map(|span: Span, tok| match &tok {
+					Token::Ident(s) =>
+						if let Some(i_type) = IotaType::get_type(&s) {
+							Ok(Expr::Value(Iota::IotaType(i_type))) }
+						else {
+							Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
+						},
+					_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+				}).delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+			).labelled("iota_type");
+
+			let entity_type = just(Token::EntityType).ignore_then(
+				filter_map(|span: Span, tok| match tok {
+					Token::Ident(s) => Ok(s),
+					_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+				}).repeated().at_least(1)
+				.map(|name_sections| name_sections.into_iter().intersperse(' '.to_string()).collect())
+				.map(|name| Expr::Value(Iota::EntityType(name)))
+				.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+			).labelled("entity_type");
+
+			let item_type = just(Token::EntityType).ignore_then(
+				filter_map(|span: Span, tok| match tok {
+					Token::Ident(s) => Ok(s),
+					_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+				}).repeated().at_least(1)
+				.map(|name_sections| name_sections.into_iter().intersperse(' '.to_string()).collect())
+				.map(|name| Expr::Value(Iota::ItemType(name)))
+				.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+			).labelled("item_type");
+
+			let gate = just(Token::Gate).ignore_then(
+				pos_int.clone()
+					.map(|num| Expr::Value(Iota::Gate(num)))
+					.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+			).labelled("item_type");
+
+			let mote = just(Token::Mote).ignore_then(
+				pos_int.clone()
+					.map(|num| Expr::Value(Iota::Mote(num)))
+					.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+			).labelled("item_type");
+
+			let iota = simple_iota
+				.or(vec3)
+				.or(pattern)
+				.or(entity)
+				.or(matrix)
+				.or(iota_type)
+				.or(entity_type)
+				.or(item_type)
+				.or(gate)
+				.or(mote);
+
 			// A list of expressions
-			let items = expr
+			let list = expr
 				.clone()
 				.chain(just(Token::Ctrl(',')).ignore_then(expr.clone()).repeated())
 				.then_ignore(just(Token::Ctrl(',')).or_not())
 				.or_not()
-				.map(|item| item.unwrap_or_else(Vec::new));
-
-			let list = items
-				.clone()
+				.map(|item| item.unwrap_or_else(Vec::new))
 				.delimited_by(just(Token::Ctrl('[')), just(Token::Ctrl(']')))
 				.map(Expr::List);
 
+			// singular iotas that can be considered // TODO gonna have a separate parser for considered consideration TODOTODO figure out how to make it happy with unbalanced ones actually
+			let considerable = iota.clone()
+				.or(list.clone());
+
+			let consideration = hex_pattern_from_signature().or(hex_pattern_from_name()).clone()
+				.then(considerable)
+				.try_map(|(pattern, expr): (HexPatternIota, Expr), span| {
+					let consideration = pattern_name_registry::get_consideration();
+					if let Ok(consideration) = consideration {
+						if Some(pattern.get_pattern()) == consideration.get_pattern() {
+							Ok(Expr::Consideration(Box::new((expr, span))))
+						} else {
+							Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern().to_string()))))
+						}
+					} else {
+						Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern().to_string()))))
+					}
+				});
+
 			// 'Atoms' are expressions that contain no ambiguity
-			let atom = val
+			let atom = simple_iota
 				.or(list)
 				// In Nano Rust, `print` is just a keyword, just like Python 2, for simplicity
 				.map_with_span(|expr, span| (expr, span))
@@ -695,7 +782,7 @@ return vec![
 		for (input, output) in inputs.iter().zip(outputs) {
 			let tokens = lexer().parse(*input).unwrap().into_iter().map(|(token, _span)| token).collect::<Vec<_>>();
 			dbg!(&tokens);
-			let (pattern, _span) = hex_pattern_from_signature().parse(tokens).unwrap();
+			let pattern = hex_pattern_from_signature().parse(tokens).unwrap();
 
 			assert_eq!(pattern.get_pattern(), output);
 		}

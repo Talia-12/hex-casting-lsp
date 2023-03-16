@@ -13,14 +13,35 @@ pub enum Iota {
 	Entity(String),
 	List(Vec<Iota>),
 	Pattern(HexPatternIota),
-	Vec3((f64, f64, f64)),
+	Vec3(f64, f64, f64),
 	Str(String),
 	Matrix(DMatrix<f64>),
 	IotaType(IotaType),
 	EntityType(String),
 	ItemType(String),
-	Gate(String),
-	Mote { id: usize },
+	Gate(usize),
+	Mote(usize),
+}
+
+impl Iota {
+	fn get_type(&self) -> IotaType {
+		match self {
+			Iota::Null => IotaType::Null,
+			Iota::Num(_) => IotaType::Num,
+			Iota::Bool(_) => IotaType::Bool,
+			Iota::Entity(_) => IotaType::Entity,
+			Iota::List(_) => IotaType::List,
+			Iota::Pattern(_) => IotaType::Pattern,
+			Iota::Vec3(_, _, _) => IotaType::Vec3,
+			Iota::Str(_) => IotaType::Str,
+			Iota::Matrix(_) => IotaType::Matrix,
+			Iota::IotaType(_) => IotaType::IotaType,
+			Iota::EntityType(_) => IotaType::Entity,
+			Iota::ItemType(_) => IotaType::ItemType,
+			Iota::Gate(_) => IotaType::Gate,
+			Iota::Mote(_) => IotaType::Mote,
+		}
+	}
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -105,23 +126,24 @@ pub enum IotaType {
 	Mote
 }
 
-impl Iota {
-	fn get_type(&self) -> IotaType {
-		match self {
-			Iota::Null => IotaType::Null,
-			Iota::Num(_) => IotaType::Num,
-			Iota::Bool(_) => IotaType::Bool,
-			Iota::Entity(_) => IotaType::Entity,
-			Iota::List(_) => IotaType::List,
-			Iota::Pattern(_) => IotaType::Pattern,
-			Iota::Vec3(_) => IotaType::Vec3,
-			Iota::Str(_) => IotaType::Str,
-			Iota::Matrix(_) => IotaType::Matrix,
-			Iota::IotaType(_) => IotaType::IotaType,
-			Iota::EntityType(_) => IotaType::Entity,
-			Iota::ItemType(_) => IotaType::ItemType,
-			Iota::Gate(_) => IotaType::Gate,
-			Iota::Mote { id } => IotaType::Mote,
+impl IotaType {
+	pub fn get_type(type_name: &str) -> Option<IotaType> {
+		match type_name {
+			"Null" => Some(IotaType::Null),
+			"Num" => Some(IotaType::Num),
+			"Bool" => Some(IotaType::Bool),
+			"Entity" => Some(IotaType::Entity),
+			"List" => Some(IotaType::List),
+			"Pattern" => Some(IotaType::Pattern),
+			"Vec3" => Some(IotaType::Vec3),
+			"Str" => Some(IotaType::Str),
+			"Matrix" => Some(IotaType::Matrix),
+			"IotaType" => Some(IotaType::IotaType),
+			"EntityType" => Some(IotaType::EntityType),
+			"ItemType" => Some(IotaType::ItemType),
+			"Gate" => Some(IotaType::Gate),
+			"Mote" => Some(IotaType::Mote),
+			_ => None
 		}
 	}
 }
@@ -130,8 +152,8 @@ impl std::fmt::Display for Iota {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		match self {
 			Self::Null => write!(f, "null"),
-			Self::Num(x) => write!(f, "{}", x),
-			Self::Bool(x) => write!(f, "{}", x),
+			Self::Num(x) => write!(f, "{x}"),
+			Self::Bool(x) => write!(f, "{x}"),
 			Self::Entity(_) => todo!(),
 			Self::List(xs) => write!(
 				f,
@@ -141,15 +163,15 @@ impl std::fmt::Display for Iota {
 					.collect::<Vec<_>>()
 					.join(", ")
 			),
-			Self::Pattern(pattern) => write!(f, "{}", pattern),
-			Self::Vec3((x, y, z)) => write!(f, "({}, {}, {})", x, y, z),
-			Self::Str(x) => write!(f, "{}", x),
+			Self::Pattern(pattern) => write!(f, "{pattern}"),
+			Self::Vec3(x, y, z) => write!(f, "({x}, {y}, {z})"),
+			Self::Str(x) => write!(f, "\"{x}\""),
 			Self::Matrix(mat) => todo!(),
-			Self::IotaType(_) => todo!(),
-			Self::EntityType(_) => todo!(),
-			Self::ItemType(_) => todo!(),
-			Self::Gate(_) => todo!(),
-			Self::Mote { id } => todo!(),
+			Self::IotaType(i_type) => write!(f, "IotaType({i_type:?})"),
+			Self::EntityType(name) => write!(f, "EntityType({name})"),
+			Self::ItemType(name) => write!(f, "ItemType({name})"),
+			Self::Gate(id) => write!(f, "Gate({id})"),
+			Self::Mote(id) => write!(f, "Mote({id})"),
 		}
 	}
 }
