@@ -1,4 +1,4 @@
-use nrs_language_server::hex_parsing::parse;
+use hex_language_server::hex_parsing::parse;
 
 fn main() {
     let source = include_str!("test.nrs");

@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use dashmap::DashMap;
-use nrs_language_server::hex_parsing::{parse, Func, ImCompleteSemanticToken};
-use nrs_language_server::completion::completion;
-use nrs_language_server::jump_definition::get_definition;
-use nrs_language_server::reference::get_reference;
-use nrs_language_server::semantic_token::{semantic_token_from_ast, LEGEND_TYPE};
+use hex_language_server::hex_parsing::{parse, Func, ImCompleteSemanticToken};
+use hex_language_server::completion::completion;
+use hex_language_server::jump_definition::get_definition;
+use hex_language_server::reference::get_reference;
+use hex_language_server::semantic_token::{semantic_token_from_ast, LEGEND_TYPE};
 use ropey::Rope;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
@@ -287,7 +287,7 @@ impl LanguageServer for Backend {
 			let mut ret = Vec::with_capacity(completions.len());
 			for (_, item) in completions {
 				match item {
-					nrs_language_server::completion::ImCompleteCompletionItem::Variable(var) => {
+					hex_language_server::completion::ImCompleteCompletionItem::Variable(var) => {
 						ret.push(CompletionItem {
 							label: var.clone(),
 							insert_text: Some(var.clone()),
@@ -296,7 +296,7 @@ impl LanguageServer for Backend {
 							..Default::default()
 						});
 					}
-					nrs_language_server::completion::ImCompleteCompletionItem::Function(
+					hex_language_server::completion::ImCompleteCompletionItem::Function(
 						name,
 						args,
 					) => {

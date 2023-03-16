@@ -287,6 +287,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "hex-language-server"
+version = "0.1.0"
+dependencies = [
+ "chumsky",
+ "dashmap",
+ "env_logger",
+ "im-rc",
+ "log",
+ "nalgebra",
+ "num-derive",
+ "num-traits",
+ "once_cell",
+ "ropey",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-lsp",
+]
+
+[[package]]
 name = "httparse"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -419,26 +439,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "nrs-language-server"
-version = "0.1.0"
-dependencies = [
- "chumsky",
- "dashmap",
- "env_logger",
- "im-rc",
- "log",
- "nalgebra",
- "num-derive",
- "num-traits",
- "once_cell",
- "ropey",
- "serde",
- "serde_json",
- "tokio",
- "tower-lsp",
 ]
 
 [[package]]
