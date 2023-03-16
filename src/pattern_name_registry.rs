@@ -1,8 +1,8 @@
-use std::{path::Path, fs::File, io::BufReader, collections::HashMap};
+use std::{path::Path, fs::File, io::BufReader, collections::HashMap, fmt::Display};
 
 use chumsky::primitive::todo;
 use once_cell::sync::Lazy;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::hex_pattern::{HexPattern, HexDir, HexAbsoluteDir};
@@ -88,7 +88,23 @@ pub enum StatOrDynRegistryEntry {
 	DynRegistryEntry(RegistryEntry)
 }
 
+impl Display for StatOrDynRegistryEntry {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			StatOrDynRegistryEntry::StatRegistryEntry(entry) => write!(f, "{}", entry),
+			StatOrDynRegistryEntry::DynRegistryEntry(entry) => write!(f, "{}", entry),
+		}
+	}
+}
+
 impl StatOrDynRegistryEntry {
+	pub fn get_id(&self) -> &str {
+		match self {
+			StatOrDynRegistryEntry::StatRegistryEntry(entry) => &entry.id,
+			StatOrDynRegistryEntry::DynRegistryEntry(entry) => &entry.id,
+		}
+	}
+	
 	pub fn get_pattern(&self) -> Option<HexPattern> {
 		match self {
 			StatOrDynRegistryEntry::StatRegistryEntry(entry) => entry.pattern.clone(),
@@ -128,6 +144,12 @@ pub struct RegistryEntry {
 	url: String
 
 	// TODO: store an image here, constructed when the entry is made!
+}
+
+impl Display for RegistryEntry {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", self.name)
+	}
 }
 
 impl RegistryEntry {

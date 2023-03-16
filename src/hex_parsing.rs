@@ -7,6 +7,7 @@ use tower_lsp::lsp_types::SemanticTokenType;
 use crate::hex_pattern::HexAbsoluteDir;
 use crate::hex_pattern::HexDir;
 use crate::hex_pattern::HexPattern;
+use crate::iota_types::HexPatternIota;
 use crate::iota_types::Iota;
 use crate::matrix_helpers::vecs_to_dyn_matrix;
 use crate::pattern_name_registry;
@@ -220,12 +221,12 @@ pub struct Func {
 	pub args: Vec<Spanned<String>>,
 	pub body: Spanned<Expr>,
 	pub name: Spanned<String>,
-	pub pattern: Spanned<HexPattern>,
+	pub pattern: Spanned<HexPatternIota>,
 	pub span: Span,
 }
 
 // string to HexPattern
-fn hex_pattern_from_signature() -> impl Parser<Token, (HexPattern, Span), Error = Simple<Token>> {
+fn hex_pattern_from_signature() -> impl Parser<Token, (HexPatternIota, Span), Error = Simple<Token>> {
 	let pattern = filter_map(|span: Span, tok| match tok {
 			Token::HexAbsoluteDir(absdir) => Ok((span, absdir)),
 			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
@@ -243,10 +244,11 @@ fn hex_pattern_from_signature() -> impl Parser<Token, (HexPattern, Span), Error 
 	just(Token::Ident("HexPattern".to_string()))
 		.ignore_then(pattern.clone().delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')'))))
 		.or(pattern)
+		.map(|(pattern, span): (HexPattern, Span)| (pattern.into(), span))
 }
 
 // consumes a pattern name AND A NEWLINE TOKEN
-fn hex_pattern_from_name() -> impl Parser<Token, (HexPattern, Span), Error = Simple<Token>> {
+fn hex_pattern_from_name() -> impl Parser<Token, (HexPatternIota, Span), Error = Simple<Token>> {
 	let name = filter_map(|span: Span, tok| match tok {
 			Token::Num(n) => Ok(n),
 			Token::Ident(name_part) => Ok(name_part),
@@ -265,6 +267,7 @@ fn hex_pattern_from_name() -> impl Parser<Token, (HexPattern, Span), Error = Sim
 				entry.get_pattern().map(|pattern| (pattern, span.clone())).ok_or(&PatternNameRegistryError::NoPatternError)
 			}).map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
 	}).then_ignore(just(Token::Ctrl('\n')))
+	.map(|(pattern, span): (HexPattern, Span)| (pattern.into(), span))
 }
 
 fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
@@ -694,7 +697,7 @@ return vec![
 			dbg!(&tokens);
 			let (pattern, _span) = hex_pattern_from_signature().parse(tokens).unwrap();
 
-			assert_eq!(pattern, output);
+			assert_eq!(pattern.get_pattern(), output);
 		}
 	}
 }

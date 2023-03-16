@@ -1,7 +1,9 @@
+use std::fmt::Display;
+
 use nalgebra::DMatrix;
 use serde::{Serialize, Deserialize};
 
-use crate::hex_pattern::HexPattern;
+use crate::{hex_pattern::{HexPattern, HexDir, HexAbsoluteDir}, pattern_name_registry::{StatOrDynRegistryEntry, registry_entry_from_id, registry_entry_from_pattern}};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Iota {
@@ -10,7 +12,7 @@ pub enum Iota {
 	Bool(bool),
 	Entity(String),
 	List(Vec<Iota>),
-	Pattern(HexPattern),
+	Pattern(HexPatternIota),
 	Vec3((f64, f64, f64)),
 	Str(String),
 	Matrix(DMatrix<f64>),
@@ -19,6 +21,70 @@ pub enum Iota {
 	ItemType(String),
 	Gate(String),
 	Mote { id: usize },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum HexPatternIota {
+	HexPattern(HexPattern),
+	RegistryEntry(StatOrDynRegistryEntry)
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+enum SerialisedHexPatternIota {
+	HexPattern(HexPattern),
+	RegistryEntry(String)
+}
+
+impl Display for HexPatternIota {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			HexPatternIota::HexPattern(pattern) => write!(f, "{}", pattern),
+			HexPatternIota::RegistryEntry(entry) => write!(f, "{}", entry),
+		}
+	}
+}
+
+impl Serialize for HexPatternIota {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer {
+		match self {
+			HexPatternIota::HexPattern(pattern) => SerialisedHexPatternIota::HexPattern(pattern.clone()).serialize(serializer),
+			HexPatternIota::RegistryEntry(entry) => {
+				if let Some(pattern) = entry.get_pattern() {
+					SerialisedHexPatternIota::HexPattern(pattern.clone()).serialize(serializer)
+				} else {
+					SerialisedHexPatternIota::RegistryEntry(entry.get_id().to_string()).serialize(serializer)
+				}
+			},
+		}
+	}
+}
+
+impl<'de> Deserialize<'de> for HexPatternIota {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de> {
+		SerialisedHexPatternIota::deserialize(deserializer).map(|serialised| match serialised {
+			SerialisedHexPatternIota::HexPattern(pattern) => registry_entry_from_pattern(&pattern).map(HexPatternIota::RegistryEntry).unwrap_or(HexPatternIota::HexPattern(pattern.clone())),
+			SerialisedHexPatternIota::RegistryEntry(id) => registry_entry_from_id(&id).map(HexPatternIota::RegistryEntry).unwrap(),
+		})
+	}
+}
+
+impl From<HexPattern> for HexPatternIota {
+	fn from(pattern: HexPattern) -> Self {
+		registry_entry_from_pattern(&pattern).map(HexPatternIota::RegistryEntry).unwrap_or_else(|_| HexPatternIota::HexPattern(pattern.clone()))
+	}
+}
+
+impl HexPatternIota {
+	pub fn get_pattern(&self) -> HexPattern {
+		match self {
+			HexPatternIota::HexPattern(pattern) => pattern.clone(),
+			HexPatternIota::RegistryEntry(entry) => entry.get_pattern().unwrap_or(HexPattern { start_dir: HexAbsoluteDir::NorthEast, pattern_vec: vec![HexDir::S, HexDir::Q, HexDir::S, HexDir::Q] }),
+		}
+	}
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
