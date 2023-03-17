@@ -1,6 +1,7 @@
 use std::{path::Path, fs::File, io::BufReader, collections::HashMap, fmt::Display};
 
 use chumsky::primitive::todo;
+use itertools::Either;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -9,15 +10,15 @@ use crate::hex_pattern::{HexPattern, HexDir, HexAbsoluteDir};
 
 static REGISTRY: Lazy<Result<(HashMap<String, RegistryEntry>, HashMap<String, RegistryEntry>, HashMap<HexPattern, RegistryEntry>), PatternNameRegistryError>> = Lazy::new(|| get_registry_from_file("registry.json"));
 
-pub fn get_consideration() -> Result<StatOrDynRegistryEntry, &'static PatternNameRegistryError> {
+pub fn get_consideration() -> Result<StatOrDynRegistryEntry, PatternNameRegistryError> {
 	registry_entry_from_id("escape")
 }
 
-fn simple_registry_entry_from_name(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
-	REGISTRY.as_ref().and_then(|(entries_by_name, _, _)| entries_by_name.get(name).map(|entry| StatOrDynRegistryEntry::StatRegistryEntry(entry)).ok_or(&PatternNameRegistryError::NoPatternError))
+fn simple_registry_entry_from_name(name: &str) -> Result<StatOrDynRegistryEntry, PatternNameRegistryError> {
+	REGISTRY.as_ref().map_err(|err| err.clone()).and_then(|(entries_by_name, _, _)| entries_by_name.get(name).map(|entry| StatOrDynRegistryEntry::StatRegistryEntry(entry)).ok_or(PatternNameRegistryError::NoPatternError(name.to_string())))
 }
 
-fn numeric_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
+fn numeric_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, PatternNameRegistryError> {
 	let parts = name.split(':').map(|s| s.trim()).collect::<Vec<_>>();
 	if parts.len() == 2 && parts[0] == "Numerical Reflection" && parts[1].parse::<f64>().is_ok() {
 		Ok(StatOrDynRegistryEntry::DynRegistryEntry(
@@ -31,11 +32,11 @@ fn numeric_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNa
 			}
 		))
 	} else {
-		Err(&PatternNameRegistryError::NoPatternError)
+		Err(PatternNameRegistryError::NoPatternError(name.to_string()))
 	}
 }
 
-fn bookkeeper_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
+fn bookkeeper_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, PatternNameRegistryError> {
 	let parts = name.split(':').map(|s| s.trim()).collect::<Vec<_>>();
 	if parts.len() == 2 && parts[0] == "Bookkeeper's Gambit" && parts[1].chars().all(|c| c == 'v' || c == '-') {
 		Ok(StatOrDynRegistryEntry::DynRegistryEntry(
@@ -49,38 +50,43 @@ fn bookkeeper_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &Patter
 			}
 		))
 	} else {
-		Err(&PatternNameRegistryError::NoPatternError)
+		Err(PatternNameRegistryError::NoPatternError(name.to_string()))
 	}
 }
 
-pub fn registry_entry_from_name(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
-	dbg!(&name);
-	dbg!(numeric_name_handler(name)
+pub fn registry_entry_from_name(name: &str) -> Result<StatOrDynRegistryEntry, PatternNameRegistryError> {
+	numeric_name_handler(name)
 		.or_else(|_| bookkeeper_name_handler(name))
-		.or_else(|_| simple_registry_entry_from_name(name)))
+		.or_else(|_| simple_registry_entry_from_name(name))
 }
 
 
 
-pub fn registry_entry_from_id(id: &str) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
-	REGISTRY.as_ref().and_then(|(_, entries_by_id, _)| entries_by_id.get(id).map(|entry| StatOrDynRegistryEntry::StatRegistryEntry(entry)).ok_or(&PatternNameRegistryError::NoPatternError))
+pub fn registry_entry_from_id(id: &str) -> Result<StatOrDynRegistryEntry, PatternNameRegistryError> {
+	REGISTRY.as_ref().map_err(|err| err.clone())
+		.and_then(|(_, entries_by_id, _)|
+			entries_by_id.get(id).map(|entry| StatOrDynRegistryEntry::StatRegistryEntry(entry)).ok_or(PatternNameRegistryError::NoPatternError(id.to_string()))
+		)
 }
 
 
-fn simple_registry_entry_from_pattern(pattern: &HexPattern) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
-	REGISTRY.as_ref().and_then(|(_, _, entries_by_pattern)| entries_by_pattern.get(pattern).map(|entry| StatOrDynRegistryEntry::StatRegistryEntry(entry)).ok_or(&PatternNameRegistryError::NoPatternError))
+fn simple_registry_entry_from_pattern(pattern: &HexPattern) -> Result<StatOrDynRegistryEntry, PatternNameRegistryError> {
+	REGISTRY.as_ref().map_err(|err| err.clone())
+		.and_then(|(_, _, entries_by_pattern)|
+			entries_by_pattern.get(pattern).map(|entry| StatOrDynRegistryEntry::StatRegistryEntry(entry)).ok_or(PatternNameRegistryError::NoPatternError(pattern.to_string()))
+		)
 }
 
 
-fn numeric_pattern_handler(pattern: &HexPattern) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
-	Err(&PatternNameRegistryError::NoPatternError) // TODO
+fn numeric_pattern_handler(pattern: &HexPattern) -> Result<StatOrDynRegistryEntry, PatternNameRegistryError> {
+	Err(PatternNameRegistryError::NoPatternError(pattern.to_string())) // TODO
 }
 
-fn bookkeeper_pattern_handler(pattern: &HexPattern) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
-	Err(&PatternNameRegistryError::NoPatternError) // TODO
+fn bookkeeper_pattern_handler(pattern: &HexPattern) -> Result<StatOrDynRegistryEntry, PatternNameRegistryError> {
+	Err(PatternNameRegistryError::NoPatternError(pattern.to_string())) // TODO
 }
 
-pub fn registry_entry_from_pattern(pattern: &HexPattern) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
+pub fn registry_entry_from_pattern(pattern: &HexPattern) -> Result<StatOrDynRegistryEntry, PatternNameRegistryError> {
 	numeric_pattern_handler(pattern)
 		.or(bookkeeper_pattern_handler(pattern))
 		.or(simple_registry_entry_from_pattern(pattern))
@@ -120,22 +126,37 @@ impl StatOrDynRegistryEntry {
 
 #[derive(Debug)]
 pub enum PatternNameRegistryError {
-	IOError(std::io::Error),
-	ParseError(serde_json::Error),
+	IOError(Either<std::io::Error, std::io::ErrorKind>),
+	ParseError(Option<serde_json::Error>),
 	RegistryFormatError,
 	InvalidPatternError,
-	NoPatternError
+	NoPatternError(String)
+}
+
+impl Clone for PatternNameRegistryError {
+	fn clone(&self) -> Self {
+		match self {
+			Self::IOError(io_error) => match io_error {
+				Either::Left(io_error) => Self::IOError(Either::Right(io_error.kind())),
+				Either::Right(io_error) => Self::IOError(Either::Right(io_error.clone())),
+			},
+			Self::ParseError(parse_error) => Self::ParseError(None),
+			Self::RegistryFormatError => Self::RegistryFormatError,
+			Self::InvalidPatternError => Self::InvalidPatternError,
+			Self::NoPatternError(error_string) => Self::NoPatternError(error_string.clone()),
+		}
+	}
 }
 
 impl From<std::io::Error> for PatternNameRegistryError {
 	fn from(value: std::io::Error) -> Self {
-		PatternNameRegistryError::IOError(value)
+		PatternNameRegistryError::IOError(Either::Left(value))
 	}
 }
 
 impl From<serde_json::Error> for PatternNameRegistryError {
 	fn from(value: serde_json::Error) -> Self {
-		PatternNameRegistryError::ParseError(value)
+		PatternNameRegistryError::ParseError(Some(value))
 	}
 }
 
@@ -254,7 +275,7 @@ mod test {
 			}
 		}"#;
 
-		let v: Value = serde_json::from_str(temp_data).map_err(PatternNameRegistryError::ParseError).unwrap();
+		let v: Value = serde_json::from_str(temp_data).unwrap();
 
 		let (entries_by_name, entries_by_id, entries_by_pattern) = get_registry(v).unwrap();
 

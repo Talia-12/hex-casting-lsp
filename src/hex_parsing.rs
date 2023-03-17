@@ -256,7 +256,7 @@ fn hex_pattern_from_signature() -> impl Parser<Token, HexPatternIota, Error = Si
 		.map(|(start_dir, dirs)| HexPattern::new(start_dir, dirs));
 
 	// make it so that it can parse HexPattern(DIR, DIRS) or just DIR, DIRS, or even DIR DIRS
-	just(Token::Ident("HexPattern".to_string()))
+	just(Token::Ident("HexPattern".to_string())).or_not()
 		.ignore_then(pattern.clone().delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')'))))
 		.or(pattern)
 		.map(|pattern| pattern.into())
@@ -295,170 +295,174 @@ fn hex_pattern_from_name() -> impl Parser<Token, HexPatternIota, Error = Simple<
 
 fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
 	recursive(|expr| {
-		let num = select! {
-			Token::Num(n) => n.parse::<f64>().unwrap()
-		}.labelled("num");
+		let non_braced_expr = recursive(|non_braced_expr| {
+			let num = select! {
+				Token::Num(n) => n.parse::<f64>().unwrap()
+			}.labelled("num");
 
-		let pos_int = select! {
-			Token::Num(n) => n.parse::<usize>().unwrap()
-		}.labelled("pos_int");
+			let pos_int = select! {
+				Token::Num(n) => n.parse::<usize>().unwrap()
+			}.labelled("pos_int");
 
-		let simple_iota = select! {
-			Token::Null => Expr::Value(Iota::Null),
-			Token::Bool(x) => Expr::Value(Iota::Bool(x)),
-			Token::Num(x) => Expr::Value(Iota::Num(x.parse::<f64>().unwrap())),
-			Token::Str(s) => Expr::Value(Iota::Str(s)),
-		}.labelled("simple_iota");
+			let simple_iota = select! {
+				Token::Null => Expr::Value(Iota::Null),
+				Token::Bool(x) => Expr::Value(Iota::Bool(x)),
+				Token::Num(x) => Expr::Value(Iota::Num(x.parse::<f64>().unwrap())),
+				Token::Str(s) => Expr::Value(Iota::Str(s)),
+			}.labelled("simple_iota");
 
-		let vec3 = num.clone().then(num.clone()).then(num.clone())
-			.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-			.map(|((x, y), z)| Expr::Value(Iota::Vec3(x, y, z)))
-			.labelled("vec3");
-
-		let pattern = hex_pattern_from_signature()
-			.or(hex_pattern_from_name().then_ignore(just(Token::Ctrl('\n'))))
-			.map(|pattern| Expr::Value(Iota::Pattern(pattern)))
-			.labelled("pattern");
-
-		let entity = just(Token::Entity).ignore_then(select! {
-			Token::Ident(name) => Expr::Value(Iota::Entity(name)),
-		}.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))).labelled("entity");
-
-		let matrix = just(Token::Matrix).ignore_then(
-			num.clone().separated_by(just(Token::Ctrl(','))).separated_by(just(Token::Ctrl(';'))).try_map(|vecvec, span| {
-				let maybe_dm = vecs_to_dyn_matrix(vecvec);
-
-				maybe_dm
-					.map(|dm| Expr::Value(Iota::Matrix(dm)))
-					.ok_or_else(|| Simple::expected_input_found(span, vec![Some(Token::Ident("A matrix with each row and column containing the same number of entries.".to_string()))], Some(Token::Ctrl(';'))))
-			}).delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-		).labelled("matrix");
-
-		let iota_type = just(Token::IotaType).ignore_then(
-			filter_map(|span: Span, tok| match &tok {
-				Token::Ident(s) =>
-					if let Some(i_type) = IotaType::get_type(&s) {
-						Ok(Expr::Value(Iota::IotaType(i_type))) }
-					else {
-						Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
-					},
-				_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-			}).delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-		).labelled("iota_type");
-
-		let entity_type = just(Token::EntityType).ignore_then(
-			select! { Token::Ident(s) => s }.repeated().at_least(1)
-			.map(|name_sections| name_sections.into_iter().intersperse(' '.to_string()).collect())
-			.map(|name| Expr::Value(Iota::EntityType(name)))
-			.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-		).labelled("entity_type");
-
-		let item_type = just(Token::EntityType).ignore_then(
-			select! { Token::Ident(s) => s }.repeated().at_least(1)
-			.map(|name_sections| name_sections.into_iter().intersperse(' '.to_string()).collect())
-			.map(|name| Expr::Value(Iota::ItemType(name)))
-			.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-		).labelled("item_type");
-
-		let gate = just(Token::Gate).ignore_then(
-			pos_int.clone()
-				.map(|num| Expr::Value(Iota::Gate(num)))
+			let vec3 = num.clone().then(num.clone()).then(num.clone())
 				.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-		).labelled("item_type");
+				.map(|((x, y), z)| Expr::Value(Iota::Vec3(x, y, z)))
+				.labelled("vec3");
 
-		let mote = just(Token::Mote).ignore_then(
-			pos_int.clone()
-				.map(|num| Expr::Value(Iota::Mote(num)))
+			let pattern = hex_pattern_from_signature()
+				.or(hex_pattern_from_name().then_ignore(just(Token::Ctrl('\n'))))
+				.map(|pattern| Expr::Value(Iota::Pattern(pattern)))
+				.labelled("pattern");
+
+			let entity = just(Token::Entity).ignore_then(select! {
+				Token::Ident(name) => Expr::Value(Iota::Entity(name)),
+			}.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))).labelled("entity");
+
+			let matrix = just(Token::Matrix).ignore_then(
+				num.clone().separated_by(just(Token::Ctrl(','))).separated_by(just(Token::Ctrl(';'))).try_map(|vecvec, span| {
+					let maybe_dm = vecs_to_dyn_matrix(vecvec);
+
+					maybe_dm
+						.map(|dm| Expr::Value(Iota::Matrix(dm)))
+						.ok_or_else(|| Simple::expected_input_found(span, vec![Some(Token::Ident("A matrix with each row and column containing the same number of entries.".to_string()))], Some(Token::Ctrl(';'))))
+				}).delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+			).labelled("matrix");
+
+			let iota_type = just(Token::IotaType).ignore_then(
+				filter_map(|span: Span, tok| match &tok {
+					Token::Ident(s) =>
+						if let Some(i_type) = IotaType::get_type(&s) {
+							Ok(Expr::Value(Iota::IotaType(i_type))) }
+						else {
+							Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
+						},
+					_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+				}).delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+			).labelled("iota_type");
+
+			let entity_type = just(Token::EntityType).ignore_then(
+				select! { Token::Ident(s) => s }.repeated().at_least(1)
+				.map(|name_sections| name_sections.into_iter().intersperse(' '.to_string()).collect())
+				.map(|name| Expr::Value(Iota::EntityType(name)))
 				.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-		).labelled("item_type");
+			).labelled("entity_type");
 
-		let iota = simple_iota
-			.or(vec3)
-			.or(pattern)
-			.or(entity)
-			.or(matrix)
-			.or(iota_type)
-			.or(entity_type)
-			.or(item_type)
-			.or(gate)
-			.or(mote)
-			.then_ignore(just(Token::Ctrl('\n')).repeated());
+			let item_type = just(Token::EntityType).ignore_then(
+				select! { Token::Ident(s) => s }.repeated().at_least(1)
+				.map(|name_sections| name_sections.into_iter().intersperse(' '.to_string()).collect())
+				.map(|name| Expr::Value(Iota::ItemType(name)))
+				.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+			).labelled("item_type");
 
-		// A list of expressions
-		let list = expr
-			.clone()
-			.chain(just(Token::Ctrl(',')).ignore_then(expr.clone()).repeated())
-			.then_ignore(just(Token::Ctrl(',')).or_not())
-			.or_not()
-			.map(|item| item.unwrap_or_else(Vec::new))
-			.delimited_by(just(Token::Ctrl('[')), just(Token::Ctrl(']')))
-			.map(Expr::List);
+			let gate = just(Token::Gate).ignore_then(
+				pos_int.clone()
+					.map(|num| Expr::Value(Iota::Gate(num)))
+					.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+			).labelled("item_type");
 
-		// singular iotas that can be considered // TODO gonna have a separate parser for considered consideration TODOTODO figure out how to make it happy with unbalanced ones actually
-		let considerable = iota.clone()
-			.or(list.clone())
-			.map_with_span(|considerable, span| (considerable, span));
+			let mote = just(Token::Mote).ignore_then(
+				pos_int.clone()
+					.map(|num| Expr::Value(Iota::Mote(num)))
+					.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+			).labelled("item_type");
 
-		let consideration = hex_pattern_from_signature().or(
-			just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':')]).try_map(|_, span|
-				pattern_name_registry::get_consideration()
-					.map(|consideration| HexPatternIota::RegistryEntry(consideration))
-					.map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
-			)
-		).clone()
-			.then(considerable)
-			.try_map(|(pattern, (expr, expr_span)): (HexPatternIota, Spanned<Expr>), span| {
-				let consideration = pattern_name_registry::get_consideration();
-				if let Ok(consideration) = consideration {
-					if Some(pattern.get_pattern()) == consideration.get_pattern() {
-						Ok(Expr::Consideration(Box::new((expr, expr_span))))
+			let iota = simple_iota
+				.or(vec3)
+				.or(pattern)
+				.or(entity)
+				.or(matrix)
+				.or(iota_type)
+				.or(entity_type)
+				.or(item_type)
+				.or(gate)
+				.or(mote)
+				.delimited_by(just(Token::Ctrl('\n')).repeated(), just(Token::Ctrl('\n')).repeated());
+
+			// A list of expressions
+			let list = non_braced_expr
+				.clone()
+				.chain(just(Token::Ctrl(',')).ignore_then(non_braced_expr.clone()).repeated())
+				.then_ignore(just(Token::Ctrl(',')).or_not())
+				.or_not()
+				.map(|item| item.unwrap_or_else(Vec::new))
+				.delimited_by(just(Token::Ctrl('[')), just(Token::Ctrl(']')))
+				.map(Expr::List);
+
+			// singular iotas that can be considered // TODO gonna have a separate parser for considered consideration TODOTODO figure out how to make it happy with unbalanced ones actually
+			let considerable = iota.clone()
+				.or(list.clone())
+				.map_with_span(|considerable, span| (considerable, span));
+
+			let consideration = hex_pattern_from_signature().or(
+				just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':')]).try_map(|_, span|
+					pattern_name_registry::get_consideration()
+						.map(|consideration| HexPatternIota::RegistryEntry(consideration))
+						.map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
+				)
+			).clone()
+				.then(considerable)
+				.try_map(|(pattern, (expr, expr_span)): (HexPatternIota, Spanned<Expr>), span| {
+					let consideration = pattern_name_registry::get_consideration();
+					if let Ok(consideration) = consideration {
+						if Some(pattern.get_pattern()) == consideration.get_pattern() {
+							Ok(Expr::Consideration(Box::new((expr, expr_span))))
+						} else {
+							Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern().to_string()))))
+						}
 					} else {
 						Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern().to_string()))))
 					}
-				} else {
-					Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern().to_string()))))
-				}
+				});
+
+			// 'Atoms' are expressions that contain no ambiguity
+			let atom = consideration
+				.or(iota)
+				.or(list)
+				.map_with_span(|expr, span| (expr, span))
+				.then_ignore(just(Token::Ctrl('\n')).repeated())
+				// Attempt to recover anything that looks like a parenthesised expression but contains errors
+				.recover_with(nested_delimiters(
+					Token::Ctrl('('),
+					Token::Ctrl(')'),
+					[
+						(Token::Ctrl('['), Token::Ctrl(']')),
+						(Token::Ctrl('{'), Token::Ctrl('}')),
+					],
+					|span| (Expr::Error, span),
+				))
+				// Attempt to recover anything that looks like a list but contains errors
+				.recover_with(nested_delimiters(
+					Token::Ctrl('['),
+					Token::Ctrl(']'),
+					[
+						(Token::Ctrl('('), Token::Ctrl(')')),
+						(Token::Ctrl('{'), Token::Ctrl('}')),
+					],
+					|span| (Expr::Error, span),
+				));
+
+				atom
 			});
 
-		// 'Atoms' are expressions that contain no ambiguity
-		let atom = consideration
-			.or(iota)
-			.or(list)
-			.map_with_span(|expr, span| (expr, span))
-			.then_ignore(just(Token::Ctrl('\n')).repeated())
-			// Attempt to recover anything that looks like a parenthesised expression but contains errors
-			.recover_with(nested_delimiters(
-				Token::Ctrl('('),
-				Token::Ctrl(')'),
-				[
-					(Token::Ctrl('['), Token::Ctrl(']')),
-					(Token::Ctrl('{'), Token::Ctrl('}')),
-				],
-				|span| (Expr::Error, span),
-			))
-			// Attempt to recover anything that looks like a list but contains errors
-			.recover_with(nested_delimiters(
-				Token::Ctrl('['),
-				Token::Ctrl(']'),
-				[
-					(Token::Ctrl('('), Token::Ctrl(')')),
-					(Token::Ctrl('{'), Token::Ctrl('}')),
-				],
-				|span| (Expr::Error, span),
-			));
-
 		// Blocks are expressions but delimited with braces
-		let block = atom.clone().or(expr.clone()).repeated()
+		let block = non_braced_expr.clone().or(expr.clone()).repeated()
 			.delimited_by(
 				just(Token::Ctrl('{')).then_ignore(just(Token::Ctrl('\n')).repeated()),
 				just(Token::Ctrl('}')).then_ignore(just(Token::Ctrl('\n')).repeated())
 			)
 			.map_with_span(|exprs, span| (Expr::IntroRetro(exprs), span))
 			.or(
-				atom.clone().or(expr.clone()).repeated()
+				non_braced_expr.clone().or(expr.clone()).repeated()
 					.delimited_by(
 						just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':'), Token::Ctrl('{')]).then_ignore(just(Token::Ctrl('\n')).repeated()),
-						just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':'), Token::Ctrl('{')])).then_ignore(just(Token::Ctrl('\n')).repeated())
+						just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':'), Token::Ctrl('}')])).then_ignore(just(Token::Ctrl('\n')).repeated())
 					.map_with_span(|exprs, span| (Expr::ConsideredIntroRetro(exprs), span))
 				)
 
@@ -495,7 +499,7 @@ pub fn macros_parser() -> impl Parser<Token, (HashMap<String, Macro>, HashMap<He
 			(name.clone(), pattern.clone(), Macro { args, return_type, body, name, pattern, span  })
 		});
 
-	macro_parser.repeated().collect::<Vec<_>>().try_map(|ms: Vec<(Spanned<String>, Spanned<HexPattern>, Macro)>, _| {
+	macro_parser.then_ignore(just(Token::Ctrl('\n')).repeated()).repeated().collect::<Vec<_>>().try_map(|ms: Vec<(Spanned<String>, Spanned<HexPattern>, Macro)>, _| {
 		let mut macros_by_name = HashMap::new();
 		let mut macros_by_pattern = HashMap::new();
 
@@ -749,9 +753,9 @@ return vec![
 	Blink
 }".to_string(),
 "{
-	{
+	Consideration: {
 		Reveal
-	}
+	Consideration: }
 	Consideration: [ // an inserted list
 		0.0,
 		1.1,
@@ -798,9 +802,9 @@ return vec![
 				Token::Ctrl('}')],
 			vec![
 				Token::Ctrl('{'), Token::Ctrl('\n'),
-					Token::Ctrl('{'), Token::Ctrl('\n'),
+					Token::Ident("Consideration".to_string()), Token::Ctrl(':'), Token::Ctrl('{'), Token::Ctrl('\n'),
 						Token::Ident("Reveal".to_string()), Token::Ctrl('\n'),
-					Token::Ctrl('}'), Token::Ctrl('\n'),
+					Token::Ident("Consideration".to_string()), Token::Ctrl(':'), Token::Ctrl('}'), Token::Ctrl('\n'),
 					Token::Ident("Consideration".to_string()), Token::Ctrl(':'), Token::Ctrl('['), Token::Comment("// an inserted list".to_string()), Token::Ctrl('\n'),
 						Token::Num("0.0".to_string()), Token::Ctrl(','), Token::Ctrl('\n'),
 						Token::Num("1.1".to_string()), Token::Ctrl(','), Token::Ctrl('\n'),
@@ -840,7 +844,6 @@ return vec![
 
 		for (input, output) in test_inputs.iter().zip(test_outputs) {
 			let tokens = lexer().parse(*input).unwrap().into_iter().map(|(token, _span)| token).collect::<Vec<_>>();
-			dbg!(&tokens);
 			let pattern = hex_pattern_from_signature().parse(tokens).unwrap();
 
 			assert_eq!(pattern.get_pattern(), output);
@@ -939,6 +942,8 @@ return vec![
 		let alidades_purification = registry_entry_from_name("Alidade's Purification").unwrap();
 		let archers_distillation = registry_entry_from_name("Archer's Distillation").unwrap();
 		let blink = registry_entry_from_name("Blink").unwrap();
+		let reveal = registry_entry_from_name("Reveal").unwrap();
+		let thoths_gambit = registry_entry_from_name("Thoth's Gambit").unwrap();
 		let bookkeepers_gambit_v_ = registry_entry_from_name("Bookkeeper's Gambit: v-").unwrap();
 
 		let test_outputs: Vec<(HashMap<String, Macro>, HashMap<HexPattern, Macro>, Option<Spanned<Expr>>)> = vec![
@@ -960,36 +965,51 @@ return vec![
 				]),
 				0..143
 			))),
+			(HashMap::new(), HashMap::new(), Some((
+				Expr::IntroRetro(vec![
+					(Expr::ConsideredIntroRetro(vec![
+						(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(reveal.clone()))), 22..29),
+					]), 3..47),
+					(Expr::Consideration(Box::new((Expr::List(vec![
+						(Expr::Value(Iota::Num(0.0)), 84..90),
+						(Expr::Value(Iota::Num(1.1)), 91..97),
+						(Expr::Value(Iota::Num(2.2)), 98..104),
+						(Expr::Value(Iota::Num(3.3)), 105..112),
+					]), 63..114))), 48..114),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(thoths_gambit.clone()))), 116..131),
+				]),
+				0..132
+			))),
 			({
 				let mut map = HashMap::new();
 				map.insert("New Distillation".to_string(), Macro {
-					args: vec![("int".to_string(), 0..2), ("int".to_string(), 3..5)],
-					return_type: vec![("int".to_string(), 12..15)],
+					args: vec![("int".to_string(), 45..48), ("int".to_string(), 50..53)],
+					return_type: vec![("int".to_string(), 57..60)],
 					body: (
 						Expr::IntroRetro(vec![
-							(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(bookkeepers_gambit_v_.clone()))), 2..2)
+							(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(bookkeepers_gambit_v_.clone()))), 64..88)
 						]),
-						0..2
+						61..91
 					),
-					name: ("New Distillation".to_string(), 0..12),
-					pattern: (HexPattern::new(HexAbsoluteDir::SouthEast, vec![HexDir:: A, HexDir::Q, HexDir::W, HexDir::E, HexDir::D]), 0..1),
-					span: 0..3
+					name: ("New Distillation".to_string(), 8..24),
+					pattern: (HexPattern::new(HexAbsoluteDir::SouthEast, vec![HexDir:: A, HexDir::Q, HexDir::W, HexDir::E, HexDir::D]), 25..42),
+					span: 0..91
 				});
 				map
 			}, {
 				let mut map = HashMap::new();
 				map.insert(HexPattern::new(HexAbsoluteDir::SouthEast, vec![HexDir:: A, HexDir::Q, HexDir::W, HexDir::E, HexDir::D]), Macro {
-					args: vec![("int".to_string(), 0..2), ("int".to_string(), 3..5)],
-					return_type: vec![("int".to_string(), 12..15)],
+					args: vec![("int".to_string(), 45..48), ("int".to_string(), 50..53)],
+					return_type: vec![("int".to_string(), 57..60)],
 					body: (
 						Expr::IntroRetro(vec![
-							(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(bookkeepers_gambit_v_.clone()))), 2..2)
+							(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(bookkeepers_gambit_v_.clone()))), 64..88)
 						]),
-						0..2
+						61..91
 					),
-					name: ("New Distillation".to_string(), 0..12),
-					pattern: (HexPattern::new(HexAbsoluteDir::SouthEast, vec![HexDir:: A, HexDir::Q, HexDir::W, HexDir::E, HexDir::D]), 0..1),
-					span: 0..3
+					name: ("New Distillation".to_string(), 8..24),
+					pattern: (HexPattern::new(HexAbsoluteDir::SouthEast, vec![HexDir:: A, HexDir::Q, HexDir::W, HexDir::E, HexDir::D]), 25..42),
+					span: 0..91
 				});
 				map
 			}, Some((
