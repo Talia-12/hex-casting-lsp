@@ -396,7 +396,8 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 
 		// singular iotas that can be considered // TODO gonna have a separate parser for considered consideration TODOTODO figure out how to make it happy with unbalanced ones actually
 		let considerable = iota.clone()
-			.or(list.clone());
+			.or(list.clone())
+			.map_with_span(|considerable, span| (considerable, span));
 
 		let consideration = hex_pattern_from_signature().or(
 			just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':')]).try_map(|_, span|
@@ -406,11 +407,11 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 			)
 		).clone()
 			.then(considerable)
-			.try_map(|(pattern, expr): (HexPatternIota, Expr), span| {
+			.try_map(|(pattern, (expr, expr_span)): (HexPatternIota, Spanned<Expr>), span| {
 				let consideration = pattern_name_registry::get_consideration();
 				if let Ok(consideration) = consideration {
 					if Some(pattern.get_pattern()) == consideration.get_pattern() {
-						Ok(Expr::Consideration(Box::new((expr, span))))
+						Ok(Expr::Consideration(Box::new((expr, expr_span))))
 					} else {
 						Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern().to_string()))))
 					}
@@ -953,11 +954,11 @@ return vec![
 			))),
 			(HashMap::new(), HashMap::new(), Some((
 				Expr::IntroRetro(vec![
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 1..1),
-					(Expr::Consideration(Box::new((Expr::Value(Iota::Num(5.0)), 2..2))), 2..2),
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(blink.clone()))), 3..3),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 97..115),
+					(Expr::Consideration(Box::new((Expr::Value(Iota::Num(5.0)), 131..135))), 116..135),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(blink.clone()))), 136..142),
 				]),
-				0..7
+				0..143
 			))),
 			({
 				let mut map = HashMap::new();
