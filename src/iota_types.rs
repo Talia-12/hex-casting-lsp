@@ -48,7 +48,7 @@ impl Iota {
 pub enum HexPatternIota {
 	HexPattern(HexPattern),
 	RegistryEntry(StatOrDynRegistryEntry),
-	Macro(String),
+	MacroPreprocessed(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -63,7 +63,7 @@ impl Display for HexPatternIota {
 		match self {
 			HexPatternIota::HexPattern(pattern) => write!(f, "{}", pattern),
 			HexPatternIota::RegistryEntry(entry) => write!(f, "{}", entry.get_name()),
-   		HexPatternIota::Macro(name) => write!(f, "{name}"),
+   		HexPatternIota::MacroPreprocessed(name) => write!(f, "{name}"),
 		}
 	}
 }
@@ -81,7 +81,7 @@ impl Serialize for HexPatternIota {
 					SerialisedHexPatternIota::RegistryEntry(entry.get_id().to_string()).serialize(serializer)
 				}
 			},
-    	HexPatternIota::Macro(name) => SerialisedHexPatternIota::Macro(name.clone()).serialize(serializer),
+    	HexPatternIota::MacroPreprocessed(name) => SerialisedHexPatternIota::Macro(name.clone()).serialize(serializer),
 		}
 	}
 }
@@ -93,7 +93,7 @@ impl<'de> Deserialize<'de> for HexPatternIota {
 		SerialisedHexPatternIota::deserialize(deserializer).map(|serialised| match serialised {
 			SerialisedHexPatternIota::HexPattern(pattern) => registry_entry_from_pattern(&pattern).map(HexPatternIota::RegistryEntry).unwrap_or(HexPatternIota::HexPattern(pattern.clone())),
 			SerialisedHexPatternIota::RegistryEntry(id) => registry_entry_from_id(&id).map(HexPatternIota::RegistryEntry).unwrap(),
-    	SerialisedHexPatternIota::Macro(name) => HexPatternIota::Macro(name),
+    	SerialisedHexPatternIota::Macro(name) => HexPatternIota::MacroPreprocessed(name),
 		})
 	}
 }
@@ -109,7 +109,7 @@ impl HexPatternIota {
 		match self {
 			HexPatternIota::HexPattern(pattern) => pattern.clone(),
 			HexPatternIota::RegistryEntry(entry) => entry.get_pattern().unwrap_or(HexPattern { start_dir: HexAbsoluteDir::NorthEast, pattern_vec: vec![HexDir::S, HexDir::Q, HexDir::S, HexDir::Q] }),
-    	HexPatternIota::Macro(name) => HexPattern { start_dir: HexAbsoluteDir::NorthEast, pattern_vec: vec![HexDir::S, HexDir::Q, HexDir::S, HexDir::Q] },
+    	HexPatternIota::MacroPreprocessed(name) => HexPattern { start_dir: HexAbsoluteDir::NorthEast, pattern_vec: vec![HexDir::S, HexDir::Q, HexDir::S, HexDir::Q] },
 		}
 	}
 }

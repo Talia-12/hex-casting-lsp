@@ -289,7 +289,7 @@ fn hex_pattern_from_name() -> impl Parser<Token, HexPatternIota, Error = Simple<
 	name.map(|name| {
 		pattern_name_registry::registry_entry_from_name(&name)
 			.map(|pattern| HexPatternIota::RegistryEntry(pattern))
-			.unwrap_or_else(|_| HexPatternIota::Macro(name))
+			.unwrap_or_else(|_| HexPatternIota::MacroPreprocessed(name))
 	})
 	
 }
@@ -946,6 +946,8 @@ return vec![
 		let reveal = registry_entry_from_name("Reveal").unwrap();
 		let thoths_gambit = registry_entry_from_name("Thoth's Gambit").unwrap();
 		let bookkeepers_gambit_v_ = registry_entry_from_name("Bookkeeper's Gambit: v-").unwrap();
+		let numerical_reflection_0 = registry_entry_from_name("Numerical Reflection: 0").unwrap();
+		let numerical_reflection_1 = registry_entry_from_name("Numerical Reflection: 1").unwrap();
 
 		let test_outputs: Vec<(HashMap<String, Macro>, HashMap<HexPattern, Macro>, Option<Spanned<Expr>>)> = vec![
 			(HashMap::new(), HashMap::new(), Some((
@@ -1015,11 +1017,12 @@ return vec![
 				map
 			}, Some((
 				Expr::IntroRetro(vec![
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 1..1),
-					(Expr::Consideration(Box::new((Expr::Value(Iota::Num(5.0)), 2..2))), 2..2),
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(blink.clone()))), 3..3),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(numerical_reflection_0.clone()))), 94..118),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(numerical_reflection_1.clone()))), 119..143),
+					(Expr::Value(Iota::Pattern(HexPatternIota::MacroPreprocessed("New Distillation".to_string()))), 144..161),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(reveal.clone()))), 162..169),
 				]),
-				0..7
+				91..170
 			))),
 		];
 
