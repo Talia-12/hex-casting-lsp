@@ -188,7 +188,7 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 pub type Spanned<T> = (T, Span);
 
 // An expression node in the AST. Children are spanned so we can generate useful runtime errors.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
 	Error,
 	Value(Iota),
@@ -232,7 +232,7 @@ impl Expr {
 }
 
 // A function node in the AST. (macro)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Macro {
 	pub args: Vec<Spanned<String>>,
 	pub return_type: Vec<Spanned<String>>,
@@ -834,6 +834,87 @@ return vec![
 	}
 
 	#[test]
+	fn test_hex_pattern_from_name() {
+		let test_inputs = vec!["Mind's Reflection", "Blink", "Bookkeeper's Gambit: v-"];
+
+		let minds_reflection: RegistryEntry = RegistryEntry {
+			name: "Mind's Reflection".to_string(),
+			id: "get_caster".to_string(),
+			mod_name: "Hex Casting".to_string(), 
+			pattern: Some(HexPattern::new(HexAbsoluteDir::NorthEast, vec![HexDir::Q, HexDir::A, HexDir::Q])),
+			args: Some("\u{2192} entity".to_string()),
+			url: Some("https://gamma-delta.github.io/HexMod/#patterns/basics@hexcasting:get_caster".to_string())
+		};
+		let blink: RegistryEntry = RegistryEntry {
+			name: "Blink".to_string(),
+			id: "blink".to_string(),
+			mod_name: "Hex Casting".to_string(), 
+			pattern: Some(HexPattern::new(HexAbsoluteDir::SouthWest, vec![HexDir::A, HexDir::W, HexDir::Q, HexDir::Q, HexDir::Q, HexDir::W, HexDir::A, HexDir::Q])),
+			args: Some("entity, number \u{2192}".to_string()),
+			url: Some("https://gamma-delta.github.io/HexMod/#patterns/spells/basic@hexcasting:blink".to_string())
+		};
+		let bookkeepers_gambit_v_ = RegistryEntry {
+			name: "Bookkeeper's Gambit: v-".to_string(),
+			id: "blink".to_string(),
+			mod_name: "Hex Casting".to_string(), 
+			pattern: None,
+			args: Some("many \u{2192} many".to_string()),
+			url: Some("https://gamma-delta.github.io/HexMod/#patterns/stackmanip@hexcasting:mask".to_string())
+		};
+
+		// Mind's Reflection
+		{
+			let tokens = lexer().parse(test_inputs[0]).unwrap().into_iter().map(|(token, _span)| token).collect::<Vec<_>>();
+			dbg!(&tokens);
+			let pattern = hex_pattern_from_name().parse(tokens).unwrap();
+
+			if let HexPatternIota::RegistryEntry(entry) = pattern {
+				if let StatOrDynRegistryEntry::StatRegistryEntry(entry) = entry {
+					assert_eq!(*entry, minds_reflection);
+				} else {
+					panic!()
+				}
+			} else {
+				panic!()
+			}
+		}
+
+		// Blink
+		{
+			let tokens = lexer().parse(test_inputs[1]).unwrap().into_iter().map(|(token, _span)| token).collect::<Vec<_>>();
+			dbg!(&tokens);
+			let pattern = hex_pattern_from_name().parse(tokens).unwrap();
+
+			if let HexPatternIota::RegistryEntry(entry) = pattern {
+				if let StatOrDynRegistryEntry::StatRegistryEntry(entry) = entry {
+					assert_eq!(*entry, blink);
+				} else {
+					panic!()
+				}
+			} else {
+				panic!()
+			}
+		}
+
+		// Bookkeeper's Gambit: v-
+		{
+			let tokens = lexer().parse(test_inputs[2]).unwrap().into_iter().map(|(token, _span)| token).collect::<Vec<_>>();
+			dbg!(&tokens);
+			let pattern = hex_pattern_from_name().parse(tokens).unwrap();
+
+			if let HexPatternIota::RegistryEntry(entry) = pattern {
+				if let StatOrDynRegistryEntry::StatRegistryEntry(entry) = entry {
+					assert_eq!(*entry, bookkeepers_gambit_v_);
+				} else {
+					panic!()
+				}
+			} else {
+				panic!()
+			}
+		}
+	}
+
+	#[test]
 	fn test_all_parsing() {
 		let test_inputs: Vec<String> = test_inputs();
 
@@ -841,6 +922,8 @@ return vec![
 		let compass_purification = registry_entry_from_name("Compass' Purification").unwrap();
 		let alidades_purification = registry_entry_from_name("Alidade's Purification").unwrap();
 		let archers_distillation = registry_entry_from_name("Archer's Distillation").unwrap();
+		let blink = registry_entry_from_name("Blink").unwrap();
+		let bookkeepers_gambit_v_ = registry_entry_from_name("Bookkeeper's Gambit: v-").unwrap();
 
 		let test_outputs: Vec<(HashMap<String, Macro>, HashMap<HexPattern, Macro>, Option<Spanned<Expr>>)> = vec![
 			(HashMap::new(), HashMap::new(), Some((
@@ -856,21 +939,59 @@ return vec![
 			(HashMap::new(), HashMap::new(), Some((
 				Expr::IntroRetro(vec![
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 1..1),
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(compass_purification))), 2..2),
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection))), 3..3),
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(alidades_purification))), 4..4),
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(archers_distillation))), 5..5),
+					(Expr::Consideration(Box::new((Expr::Value(Iota::Num(5.0)), 2..2))), 2..2),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(blink.clone()))), 3..3),
 				]),
 				0..7
 			))),
-			
+			({
+				let mut map = HashMap::new();
+				map.insert("New Distillation".to_string(), Macro {
+					args: vec![("int".to_string(), 0..2), ("int".to_string(), 3..5)],
+					return_type: vec![("int".to_string(), 12..15)],
+					body: (
+						Expr::IntroRetro(vec![
+							(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(bookkeepers_gambit_v_.clone()))), 2..2)
+						]),
+						0..2
+					),
+					name: ("New Distillation".to_string(), 0..12),
+					pattern: (HexPattern::new(HexAbsoluteDir::SouthEast, vec![HexDir:: A, HexDir::Q, HexDir::W, HexDir::E, HexDir::D]), 0..1),
+					span: 0..3
+				});
+				map
+			}, {
+				let mut map = HashMap::new();
+				map.insert(HexPattern::new(HexAbsoluteDir::SouthEast, vec![HexDir:: A, HexDir::Q, HexDir::W, HexDir::E, HexDir::D]), Macro {
+					args: vec![("int".to_string(), 0..2), ("int".to_string(), 3..5)],
+					return_type: vec![("int".to_string(), 12..15)],
+					body: (
+						Expr::IntroRetro(vec![
+							(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(bookkeepers_gambit_v_.clone()))), 2..2)
+						]),
+						0..2
+					),
+					name: ("New Distillation".to_string(), 0..12),
+					pattern: (HexPattern::new(HexAbsoluteDir::SouthEast, vec![HexDir:: A, HexDir::Q, HexDir::W, HexDir::E, HexDir::D]), 0..1),
+					span: 0..3
+				});
+				map
+			}, Some((
+				Expr::IntroRetro(vec![
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 1..1),
+					(Expr::Consideration(Box::new((Expr::Value(Iota::Num(5.0)), 2..2))), 2..2),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(blink.clone()))), 3..3),
+				]),
+				0..7
+			))),
 		];
 
 		for (input, output) in test_inputs.iter().zip(test_outputs) {
 			let (ast, errs, semantic_tokens) = parse(input);
-			let (macros_by_name, macros_by_pattern, main_body) = ast.unwrap();
+			// let (macros_by_name, macros_by_pattern, main_body) = ast.unwrap();
+			let ast = ast.unwrap();
 
-			
+			assert_eq!(ast, output)
 		}
 	}
 }

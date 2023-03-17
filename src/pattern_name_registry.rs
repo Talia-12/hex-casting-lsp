@@ -26,8 +26,8 @@ fn numeric_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNa
 				id: "number".to_string(),
 				mod_name: "Hex Casting".to_string(),
 				pattern: None, // TODO
-				args: "\u{2192} number".to_string(),
-				url: "https://gamma-delta.github.io/HexMod/#patterns/numbers@Numbers".to_string()
+				args: Some("\u{2192} number".to_string()),
+				url: Some("https://gamma-delta.github.io/HexMod/#patterns/numbers@Numbers".to_string())
 			}
 		))
 	} else {
@@ -44,8 +44,8 @@ fn bookkeeper_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &Patter
 				id: "mask".to_string(),
 				mod_name: "Hex Casting".to_string(),
 				pattern: None, // TODO
-				args: "many \u{2192} many".to_string(),
-				url: "https://gamma-delta.github.io/HexMod/#patterns/stackmanip@hexcasting:mask".to_string()
+				args: Some("many \u{2192} many".to_string()),
+				url: Some("https://gamma-delta.github.io/HexMod/#patterns/stackmanip@hexcasting:mask".to_string())
 			}
 		))
 	} else {
@@ -144,8 +144,8 @@ pub struct RegistryEntry {
 	pub id: String,
 	pub mod_name: String,
 	pub pattern: Option<HexPattern>,
-	pub args: String,
-	pub url: String
+	pub args: Option<String>,
+	pub url: Option<String>
 
 	// TODO: store an image here, constructed when the entry is made!
 }
@@ -158,7 +158,9 @@ impl Display for RegistryEntry {
 
 impl RegistryEntry {
 	fn from_raw(raw: RawRegistryEntry, name: String) -> Result<RegistryEntry, PatternNameRegistryError> {
-		let pattern = HexAbsoluteDir::from_str(&raw.direction).map(|dir| HexPattern::new(dir, HexDir::from_str(&raw.pattern)));
+		let pattern = raw.pattern.clone().and_then(|pattern|
+			raw.direction.clone().and_then(|direction| HexAbsoluteDir::from_str(&direction).map(|dir| HexPattern::new(dir, HexDir::from_str(&pattern))))
+		);
 
 		Ok(RegistryEntry { name, id: raw.id, mod_name: raw.mod_name, pattern, args: raw.args, url: raw.url })
 	}
@@ -171,16 +173,16 @@ struct RawRegistryEntry {
 	
 	#[serde(rename = "modName")]
 	mod_name: String,
-	direction: String,
-	pattern: String,
-	args: String,
-	url: String
+	direction: Option<String>,
+	pattern: Option<String>,
+	args: Option<String>,
+	url: Option<String>
 }
 
 fn get_registry_from_file<P: AsRef<Path>>(path: P) -> Result<(HashMap<String, RegistryEntry>, HashMap<String, RegistryEntry>, HashMap<HexPattern, RegistryEntry>), PatternNameRegistryError> {
 	let file = File::open(path)?;
 	let reader = BufReader::new(file);
-	
+
 	let v = serde_json::from_reader(reader)?;
 
 	get_registry(v)
@@ -199,6 +201,9 @@ fn get_registry(v: Value) -> Result<(HashMap<String, RegistryEntry>, HashMap<Str
 			let mut entries_by_pattern = HashMap::new();
 			
 			for (name, value) in inner.into_iter() {
+				dbg!("asdf");
+				dbg!(&value);
+				
 				let raw_entry: RawRegistryEntry = serde_json::from_value(value)?;
 				let entry: RegistryEntry = RegistryEntry::from_raw(raw_entry, name.clone())?;
 
@@ -251,7 +256,7 @@ mod test {
 			}
 		}"#;
 
-		let v: Value = serde_json::from_str(temp_data).map_err(PatternNameRegistryError::ParseError).unwrap(); // TODO: change to from_reader to read from file
+		let v: Value = serde_json::from_str(temp_data).map_err(PatternNameRegistryError::ParseError).unwrap();
 
 		let (entries_by_name, entries_by_id, entries_by_pattern) = get_registry(v).unwrap();
 
@@ -261,20 +266,20 @@ mod test {
 				id: "entity_pos/eye".to_string(),
 				mod_name: "Hex Casting".to_string(),
 				pattern: Some(HexPattern { start_dir: HexAbsoluteDir::East, pattern_vec: vec![HexDir::A, HexDir::A] }),
-				args: "entity \u{2192} vector".to_string(),
-				url: "https://gamma-delta.github.io/HexMod/#patterns/basics@hexcasting:entity_pos/eye".to_string()
+				args: Some("entity \u{2192} vector".to_string()),
+				url: Some("https://gamma-delta.github.io/HexMod/#patterns/basics@hexcasting:entity_pos/eye".to_string())
 			},
 			RegistryEntry {
 				name: "Mind's Reflection".to_string(),
 				id: "get_caster".to_string(),
 				mod_name: "Hex Casting".to_string(),
 				pattern: Some(HexPattern { start_dir: HexAbsoluteDir::NorthEast, pattern_vec: vec![HexDir::Q, HexDir::A, HexDir::Q] }),
-				args: "\u{2192} entity".to_string(),
-				url: "https://gamma-delta.github.io/HexMod/#patterns/basics@hexcasting:get_caster".to_string()
+				args: Some("\u{2192} entity".to_string()),
+				url: Some("https://gamma-delta.github.io/HexMod/#patterns/basics@hexcasting:get_caster".to_string())
 			},
 		];
 
-		assert_eq!(entries_by_name, expected_entries_vec.iter().map(|entry| (entry.name.chars().filter(|&c| c != ' ').collect(), entry.clone())).collect());
+		assert_eq!(entries_by_name, expected_entries_vec.iter().map(|entry| (entry.name.clone(), entry.clone())).collect());
 		assert_eq!(entries_by_id, expected_entries_vec.iter().map(|entry| (entry.id.clone(), entry.clone())).collect());
 		assert_eq!(entries_by_pattern, expected_entries_vec.iter().filter_map(|entry| entry.pattern.clone().map(|pat| (pat, entry.clone()))).collect());
 	}

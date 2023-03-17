@@ -479,8 +479,8 @@ impl Backend {
 			.publish_diagnostics(params.uri.clone(), diagnostics, Some(params.version))
 			.await;
 
-		if let Some(ast) = ast {
-			self.ast_map.insert(params.uri.to_string(), ast);
+		if let Some((macros_by_name, macros_by_pattern, main_body)) = ast {
+			self.ast_map.insert(params.uri.to_string(), macros_by_name);
 		}
 		// self.client
 		//     .log_message(MessageType::INFO, &format!("{:?}", semantic_tokens))
