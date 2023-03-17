@@ -18,7 +18,7 @@ fn simple_registry_entry_from_name(name: &str) -> Result<StatOrDynRegistryEntry,
 }
 
 fn numeric_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
-	let parts = name.split(':').collect::<Vec<_>>();
+	let parts = name.split(':').map(|s| s.trim()).collect::<Vec<_>>();
 	if parts.len() == 2 && parts[0] == "Numerical Reflection" && parts[1].parse::<f64>().is_ok() {
 		Ok(StatOrDynRegistryEntry::DynRegistryEntry(
 			RegistryEntry {
@@ -36,7 +36,7 @@ fn numeric_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNa
 }
 
 fn bookkeeper_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
-	let parts = name.split(':').collect::<Vec<_>>();
+	let parts = name.split(':').map(|s| s.trim()).collect::<Vec<_>>();
 	if parts.len() == 2 && parts[0] == "Bookkeeper's Gambit" && parts[1].chars().all(|c| c == 'v' || c == '-') {
 		Ok(StatOrDynRegistryEntry::DynRegistryEntry(
 			RegistryEntry {
@@ -54,9 +54,10 @@ fn bookkeeper_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &Patter
 }
 
 pub fn registry_entry_from_name(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
-	numeric_name_handler(name)
-		.or(bookkeeper_name_handler(name))
-		.or(simple_registry_entry_from_name(name))
+	dbg!(&name);
+	dbg!(numeric_name_handler(name)
+		.or_else(|_| bookkeeper_name_handler(name))
+		.or_else(|_| simple_registry_entry_from_name(name)))
 }
 
 
@@ -201,9 +202,6 @@ fn get_registry(v: Value) -> Result<(HashMap<String, RegistryEntry>, HashMap<Str
 			let mut entries_by_pattern = HashMap::new();
 			
 			for (name, value) in inner.into_iter() {
-				dbg!("asdf");
-				dbg!(&value);
-				
 				let raw_entry: RawRegistryEntry = serde_json::from_value(value)?;
 				let entry: RegistryEntry = RegistryEntry::from_raw(raw_entry, name.clone())?;
 

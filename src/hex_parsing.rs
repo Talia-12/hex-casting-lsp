@@ -288,11 +288,9 @@ fn hex_pattern_from_name() -> impl Parser<Token, HexPatternIota, Error = Simple<
 
 	name.try_map(|name, span| {
 		pattern_name_registry::registry_entry_from_name(&name)
-			.and_then(|entry| {
-				entry.get_pattern().map(|pattern| pattern).ok_or(&PatternNameRegistryError::NoPatternError)
-			}).map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
+			.map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
 	})
-	.map(|pattern| pattern.into())
+	.map(|pattern| HexPatternIota::RegistryEntry(pattern))
 }
 
 fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
@@ -383,7 +381,8 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 			.or(entity_type)
 			.or(item_type)
 			.or(gate)
-			.or(mote);
+			.or(mote)
+			.then_ignore(just(Token::Ctrl('\n')).repeated());
 
 		// A list of expressions
 		let list = expr
@@ -399,7 +398,13 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 		let considerable = iota.clone()
 			.or(list.clone());
 
-		let consideration = hex_pattern_from_signature().or(hex_pattern_from_name()).clone()
+		let consideration = hex_pattern_from_signature().or(
+			just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':')]).try_map(|_, span|
+				pattern_name_registry::get_consideration()
+					.map(|consideration| HexPatternIota::RegistryEntry(consideration))
+					.map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
+			)
+		).clone()
 			.then(considerable)
 			.try_map(|(pattern, expr): (HexPatternIota, Expr), span| {
 				let consideration = pattern_name_registry::get_consideration();
@@ -416,9 +421,10 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 
 		// 'Atoms' are expressions that contain no ambiguity
 		let atom = consideration
-			.or(simple_iota)
+			.or(iota)
 			.or(list)
 			.map_with_span(|expr, span| (expr, span))
+			.then_ignore(just(Token::Ctrl('\n')).repeated())
 			// Attempt to recover anything that looks like a parenthesised expression but contains errors
 			.recover_with(nested_delimiters(
 				Token::Ctrl('('),
@@ -441,15 +447,20 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 			));
 
 		// Blocks are expressions but delimited with braces
-		let block = expr
-			.clone()
-			.delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
-			.or(
-				expr.clone()
-					.delimited_by(
-						just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':'), Token::Ctrl('{')]),
-						just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':'), Token::Ctrl('{')]))
+		let block = atom.clone().or(expr.clone()).repeated()
+			.delimited_by(
+				just(Token::Ctrl('{')).then_ignore(just(Token::Ctrl('\n')).repeated()),
+				just(Token::Ctrl('}')).then_ignore(just(Token::Ctrl('\n')).repeated())
 			)
+			.map_with_span(|exprs, span| (Expr::IntroRetro(exprs), span))
+			.or(
+				atom.clone().or(expr.clone()).repeated()
+					.delimited_by(
+						just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':'), Token::Ctrl('{')]).then_ignore(just(Token::Ctrl('\n')).repeated()),
+						just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':'), Token::Ctrl('{')])).then_ignore(just(Token::Ctrl('\n')).repeated())
+					.map_with_span(|exprs, span| (Expr::ConsideredIntroRetro(exprs), span))
+				)
+
 			// Attempt to recover anything that looks like a block but contains errors
 			.recover_with(nested_delimiters(
 				Token::Ctrl('{'),
@@ -523,6 +534,8 @@ pub fn parse(
 	let (ast, tokenize_errors, semantic_tokens) = if let Some(tokens) = tokens {
 		// info!("Tokens = {:?}", tokens);
 		
+		// println!("asdftokens: {:#?}", &tokens);
+
 		let semantic_tokens = tokens
 			.iter()
 			.filter_map(|(token, span)| match token {
@@ -673,7 +686,7 @@ pub fn parse(
 		let (ast, parse_errs) =
 			main_parser().parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter().filter(|(token, _)| !token.is_comment())));
 
-		println!("{:#?}", ast);
+		// println!("{:#?}", ast);
 		// if let Some((macros_by_name, macros_by_pattern, main_body)) = ast.filter(|_| errs.len() + parse_errs.len() == 0) {
 		// 	if let Some(main_body) = main_body {
 		// 		assert_eq!(main_body.args.len(), 0);
@@ -855,7 +868,7 @@ return vec![
 		};
 		let bookkeepers_gambit_v_ = RegistryEntry {
 			name: "Bookkeeper's Gambit: v-".to_string(),
-			id: "blink".to_string(),
+			id: "mask".to_string(),
 			mod_name: "Hex Casting".to_string(), 
 			pattern: None,
 			args: Some("many \u{2192} many".to_string()),
@@ -902,9 +915,11 @@ return vec![
 			dbg!(&tokens);
 			let pattern = hex_pattern_from_name().parse(tokens).unwrap();
 
+			dbg!(&pattern);
+
 			if let HexPatternIota::RegistryEntry(entry) = pattern {
-				if let StatOrDynRegistryEntry::StatRegistryEntry(entry) = entry {
-					assert_eq!(*entry, bookkeepers_gambit_v_);
+				if let StatOrDynRegistryEntry::DynRegistryEntry(entry) = entry {
+					assert_eq!(entry, bookkeepers_gambit_v_);
 				} else {
 					panic!()
 				}
@@ -928,13 +943,13 @@ return vec![
 		let test_outputs: Vec<(HashMap<String, Macro>, HashMap<HexPattern, Macro>, Option<Spanned<Expr>>)> = vec![
 			(HashMap::new(), HashMap::new(), Some((
 				Expr::IntroRetro(vec![
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 1..1),
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(compass_purification.clone()))), 2..2),
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 3..3),
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(alidades_purification.clone()))), 4..4),
-					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(archers_distillation.clone()))), 5..5),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 3..21),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(compass_purification.clone()))), 22..44),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 45..63),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(alidades_purification.clone()))), 64..87),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(archers_distillation.clone()))), 88..110),
 				]),
-				0..7
+				0..111
 			))),
 			(HashMap::new(), HashMap::new(), Some((
 				Expr::IntroRetro(vec![
@@ -988,8 +1003,13 @@ return vec![
 
 		for (input, output) in test_inputs.iter().zip(test_outputs) {
 			let (ast, errs, semantic_tokens) = parse(input);
-			// let (macros_by_name, macros_by_pattern, main_body) = ast.unwrap();
 			let ast = ast.unwrap();
+			
+			if errs.len() != 0 {
+				dbg!(input);
+				dbg!(errs);
+				dbg!(semantic_tokens);
+			}
 
 			assert_eq!(ast, output)
 		}
