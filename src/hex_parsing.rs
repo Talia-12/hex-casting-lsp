@@ -286,11 +286,12 @@ fn pattern_name() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
 fn hex_pattern_from_name() -> impl Parser<Token, HexPatternIota, Error = Simple<Token>> + Clone {
 	let name = pattern_name();
 
-	name.try_map(|name, span| {
+	name.map(|name| {
 		pattern_name_registry::registry_entry_from_name(&name)
-			.map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
+			.map(|pattern| HexPatternIota::RegistryEntry(pattern))
+			.unwrap_or_else(|_| HexPatternIota::Macro(name))
 	})
-	.map(|pattern| HexPatternIota::RegistryEntry(pattern))
+	
 }
 
 fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + Clone {
@@ -411,13 +412,13 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 				.try_map(|(pattern, (expr, expr_span)): (HexPatternIota, Spanned<Expr>), span| {
 					let consideration = pattern_name_registry::get_consideration();
 					if let Ok(consideration) = consideration {
-						if Some(pattern.get_pattern()) == consideration.get_pattern() {
+						if Some(pattern.get_pattern_no_macro_lookup()) == consideration.get_pattern() {
 							Ok(Expr::Consideration(Box::new((expr, expr_span))))
 						} else {
-							Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern().to_string()))))
+							Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern_no_macro_lookup().to_string()))))
 						}
 					} else {
-						Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern().to_string()))))
+						Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern_no_macro_lookup().to_string()))))
 					}
 				});
 
@@ -491,7 +492,7 @@ pub fn macros_parser() -> impl Parser<Token, (HashMap<String, Macro>, HashMap<He
 
 	let macro_parser = just(vec![Token::Ctrl('#'), Token::Define])
 		.ignore_then(name)
-		.then(hex_pattern_from_signature().map_with_span(|pattern, span| (pattern.get_pattern(), span)))
+		.then(hex_pattern_from_signature().map_with_span(|pattern, span| (pattern.get_pattern_no_macro_lookup(), span)))
 		.then_ignore(just(Token::Ctrl('=')))
 		.then(type_signature)
 		.then(expr_parser())
@@ -846,7 +847,7 @@ return vec![
 			let tokens = lexer().parse(*input).unwrap().into_iter().map(|(token, _span)| token).collect::<Vec<_>>();
 			let pattern = hex_pattern_from_signature().parse(tokens).unwrap();
 
-			assert_eq!(pattern.get_pattern(), output);
+			assert_eq!(pattern.get_pattern_no_macro_lookup(), output);
 		}
 	}
 

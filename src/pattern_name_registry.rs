@@ -102,24 +102,29 @@ pub enum StatOrDynRegistryEntry {
 impl Display for StatOrDynRegistryEntry {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			StatOrDynRegistryEntry::StatRegistryEntry(entry) => write!(f, "{}", entry),
-			StatOrDynRegistryEntry::DynRegistryEntry(entry) => write!(f, "{}", entry),
+			StatOrDynRegistryEntry::StatRegistryEntry(entry) => write!(f, "{entry}"),
+			StatOrDynRegistryEntry::DynRegistryEntry(entry) => write!(f, "{entry}"),
 		}
 	}
 }
 
 impl StatOrDynRegistryEntry {
+	pub fn get_name(&self) -> &str {
+		&self.get_entry().name
+	}
+
 	pub fn get_id(&self) -> &str {
-		match self {
-			StatOrDynRegistryEntry::StatRegistryEntry(entry) => &entry.id,
-			StatOrDynRegistryEntry::DynRegistryEntry(entry) => &entry.id,
-		}
+		&self.get_entry().id
 	}
 	
 	pub fn get_pattern(&self) -> Option<HexPattern> {
+		self.get_entry().pattern.clone()
+	}
+
+	pub fn get_entry(&self) -> &RegistryEntry {
 		match self {
-			StatOrDynRegistryEntry::StatRegistryEntry(entry) => entry.pattern.clone(),
-			StatOrDynRegistryEntry::DynRegistryEntry(entry) => entry.pattern.clone(),
+			StatOrDynRegistryEntry::StatRegistryEntry(entry) => entry,
+			StatOrDynRegistryEntry::DynRegistryEntry(entry) => entry,
 		}
 	}
 }
