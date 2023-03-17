@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use crate::hex_parsing::{Expr, Func, Spanned};
+use crate::hex_parsing::{Expr, Macro, Spanned};
 pub enum ImCompleteCompletionItem {
     Variable(String),
     Function(String, Vec<String>),
 }
 /// return (need_to_continue_search, founded reference)
 pub fn completion(
-    ast: &HashMap<String, Func>,
+    ast: &HashMap<String, Macro>,
     ident_offset: usize,
 ) -> HashMap<String, ImCompleteCompletionItem> {
     let mut map = HashMap::new();
@@ -61,5 +61,6 @@ pub fn get_completion_of(
         }
         Expr::Consideration(_) => todo!(),
         Expr::IntroRetro(_) => todo!(),
+        Expr::ConsideredIntroRetro(_) => todo!(),
     }
 }

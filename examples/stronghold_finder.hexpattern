@@ -1,0 +1,112 @@
+// What this should do is:
+// find the eye of ender and calculate the distance and angle to it
+// if the focus in the offhand is empty, save slope and intercept of line defined by eye position and player position
+// if the focus in the offhand isn't empty, use the slope and intercept to compute the stronghold position.
+
+#define Pattern Name: 4 (SOUTHEAST aqwed) = a -> b {
+	
+}
+
+{
+	Mind's Reflection
+	Compass' Purification
+	Numerical Reflection: 20
+	Prospector's Gambit
+	Prospector's Gambit
+	Numerical Reflection: 2
+	Flock's Gambit
+	Huginn's Gambit
+	Zone Distillation: Non-Animal
+	Muninn's Reflection
+	Flock's Disintegration
+	Zone Distillation: Non-Monster
+	Muninn's Reflection
+	Flock's Disintegration
+	Zone Distillation: Non-Item
+	Muninn's Reflection
+	Flock's Disintegration
+	Zone Distillation: Non-Player
+	Muninn's Reflection
+	Flock's Disintegration
+	Zone Distillation: Non-Living
+	
+	Intersection Distillation
+	Intersection Distillation
+	Intersection Distillation
+	Intersection Distillation
+	
+	Numerical Reflection: 0
+	Selection Distillation   // stack contains only Eye of Ender (confirmed works)
+	
+	Compass' Purification
+	Vector Disintegration
+	Bookkeeper's Gambit: -v- // stack contains eye.x, eye.z
+	
+	Mind's Reflection
+	Compass' Purification
+	Vector Disintegration
+	Bookkeeper's Gambit: -v-  // stack contains eye.x, eye.z, player.x, player.z
+	
+	Numerical Reflection: 2
+	Swindler's Gambit // stack contains eye.x, player.x, eye.z, player.z: bac
+
+	Subtractive Distillation
+	Rotation Gambit II
+	Subtractive Distillation // stack contains z_diff, x_diff
+	Division Distillation // stack contains m
+
+	Gemini Decomposition
+
+	Mind's Reflection
+	Compass' Purification
+	Vector Disintegration
+	Bookkeeper's Gambit: -v-  // stack contains m, m, player.x, player.z
+
+	Rotation Gambit II
+	Multiplicative Distillation // stack contains m, player.z, m*player.x
+	Subtractive Distillation // stack contains m, c (confirmed works)
+	
+	Scribe's Reflection
+	Nullary Reflection
+	Inequality Distillation
+	
+	
+	{ // if offhand isn't empty
+		Scribe's Reflection
+		Flock's Disintegration // stack contains m0, c0, m1, c1
+
+		Numerical Reflection: 12
+		Swindler's Gambit // stack contains m1, m0, c0, c1: bdca
+
+		Subtractive Distillation
+		Rotation Gambit II
+		Subtractive Distillation
+		Division Distillation // stack contains x
+
+		Gemini Decomposition
+
+		Scribe's Reflection
+		Flock's Disintegration // stack contains x, x, m1, c1
+		Rotation Gambit II
+		Multiplicative Distillation
+		Additive Distillation // stack contains x, z
+
+		Numerical Reflection: 0
+		Jester's Gambit
+		Vector Exaltation
+		Reveal // print (x, 0, z)
+		Scribe's Gambit
+	}
+
+	{ // if offhand is empty
+		Numerical Reflection: 2
+		Flock's Gambit
+		Scribe's Gambit
+	}
+
+	Augur's Exaltation
+	Hermes' Gambit
+}
+
+
+

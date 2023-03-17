@@ -19,7 +19,7 @@ fn simple_registry_entry_from_name(name: &str) -> Result<StatOrDynRegistryEntry,
 
 fn numeric_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
 	let parts = name.split(':').collect::<Vec<_>>();
-	if parts.len() == 2 && parts[0] == "NumericalReflection" && parts[1].parse::<f64>().is_ok() {
+	if parts.len() == 2 && parts[0] == "Numerical Reflection" && parts[1].parse::<f64>().is_ok() {
 		Ok(StatOrDynRegistryEntry::DynRegistryEntry(
 			RegistryEntry {
 				name: format!("Numerical Reflection: {}", parts[1]),
@@ -37,7 +37,7 @@ fn numeric_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNa
 
 fn bookkeeper_name_handler(name: &str) -> Result<StatOrDynRegistryEntry, &PatternNameRegistryError> {
 	let parts = name.split(':').collect::<Vec<_>>();
-	if parts.len() == 2 && parts[0] == "Bookkeeper'sGambit" && parts[1].chars().all(|c| c == 'v' || c == '-') {
+	if parts.len() == 2 && parts[0] == "Bookkeeper's Gambit" && parts[1].chars().all(|c| c == 'v' || c == '-') {
 		Ok(StatOrDynRegistryEntry::DynRegistryEntry(
 			RegistryEntry {
 				name: format!("Bookkeeper's Gambit: {}", parts[1]),
@@ -140,12 +140,12 @@ impl From<serde_json::Error> for PatternNameRegistryError {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct RegistryEntry {
-	name: String,
-	id: String,
-	mod_name: String,
-	pattern: Option<HexPattern>,
-	args: String,
-	url: String
+	pub name: String,
+	pub id: String,
+	pub mod_name: String,
+	pub pattern: Option<HexPattern>,
+	pub args: String,
+	pub url: String
 
 	// TODO: store an image here, constructed when the entry is made!
 }
@@ -202,7 +202,7 @@ fn get_registry(v: Value) -> Result<(HashMap<String, RegistryEntry>, HashMap<Str
 				let raw_entry: RawRegistryEntry = serde_json::from_value(value)?;
 				let entry: RegistryEntry = RegistryEntry::from_raw(raw_entry, name.clone())?;
 
-				entries_by_name.insert(name.chars().filter(|&c| c != ' ').collect(), entry.clone());
+				entries_by_name.insert(name, entry.clone());
 				entries_by_id.insert(entry.id.clone(), entry.clone());
 
 				if let Some(pattern) = &entry.pattern {

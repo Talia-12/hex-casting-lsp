@@ -4,10 +4,10 @@ use im_rc::Vector;
 use log::debug;
 use tower_lsp::{lsp_types::MessageType, Client};
 
-use crate::hex_parsing::{Expr, Func, Spanned};
+use crate::hex_parsing::{Expr, Macro, Spanned};
 /// return (need_to_continue_search, founded reference)
 pub fn get_definition(
-    ast: &HashMap<String, Func>,
+    ast: &HashMap<String, Macro>,
     ident_offset: usize,
 ) -> Option<Spanned<String>> {
     let mut vector = Vector::new();
@@ -43,5 +43,6 @@ pub fn get_definition_of_expr(
         Expr::List(exprs) => (true, None),
         Expr::Consideration(_) => (true, None),
         Expr::IntroRetro(_) => (true, None),
+        Expr::ConsideredIntroRetro(_) => todo!(),
     }
 }

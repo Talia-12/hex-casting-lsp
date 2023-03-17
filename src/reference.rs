@@ -4,7 +4,7 @@ use chumsky::Span;
 use im_rc::Vector;
 
 
-use crate::hex_parsing::{Expr, Func, Spanned};
+use crate::hex_parsing::{Expr, Macro, Spanned};
 #[derive(Debug, Clone)]
 pub enum ReferenceSymbol {
     Founded(Spanned<String>),
@@ -12,7 +12,7 @@ pub enum ReferenceSymbol {
 }
 use ReferenceSymbol::*;
 pub fn get_reference(
-    ast: &HashMap<String, Func>,
+    ast: &HashMap<String, Macro>,
     ident_offset: usize,
     include_self: bool,
 ) -> Vec<Spanned<String>> {
@@ -73,5 +73,6 @@ pub fn get_reference_of_expr(
         Expr::List(_) => todo!(),
         Expr::Consideration(_) => todo!(),
         Expr::IntroRetro(_) => todo!(),
+        Expr::ConsideredIntroRetro(_) => todo!(),
     }
 }

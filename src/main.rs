@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use dashmap::DashMap;
-use hex_language_server::hex_parsing::{parse, Func, ImCompleteSemanticToken};
+use hex_language_server::hex_parsing::{parse, Macro, ImCompleteSemanticToken};
 use hex_language_server::completion::completion;
 use hex_language_server::jump_definition::get_definition;
 use hex_language_server::reference::get_reference;
@@ -14,7 +14,7 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 #[derive(Debug)]
 struct Backend {
 	client: Client,
-	ast_map: DashMap<String, HashMap<String, Func>>,
+	ast_map: DashMap<String, HashMap<String, Macro>>,
 	document_map: DashMap<String, Rope>,
 	semantic_token_map: DashMap<String, Vec<ImCompleteSemanticToken>>,
 }

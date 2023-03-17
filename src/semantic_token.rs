@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use tower_lsp::lsp_types::{SemanticTokenType};
 
-use crate::hex_parsing::{Expr, Func, ImCompleteSemanticToken, Spanned};
+use crate::hex_parsing::{Expr, Macro, ImCompleteSemanticToken, Spanned};
 
 pub const LEGEND_TYPE: &[SemanticTokenType] = &[
     SemanticTokenType::FUNCTION,
@@ -15,7 +15,7 @@ pub const LEGEND_TYPE: &[SemanticTokenType] = &[
     SemanticTokenType::PARAMETER,
 ];
 
-pub fn semantic_token_from_ast(ast: &HashMap<String, Func>) -> Vec<ImCompleteSemanticToken> {
+pub fn semantic_token_from_ast(ast: &HashMap<String, Macro>) -> Vec<ImCompleteSemanticToken> {
     let mut semantic_tokens = vec![];
 
     ast.iter().for_each(|(_func_name, function)| {
@@ -54,5 +54,6 @@ pub fn semantic_token_from_expr(
         Expr::List(_) => {}
         Expr::Consideration(_) => todo!(),
         Expr::IntroRetro(_) => todo!(),
+        Expr::ConsideredIntroRetro(_) => todo!(),
     }
 }
