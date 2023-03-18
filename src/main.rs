@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use dashmap::DashMap;
-use hex_language_server::hex_parsing::{parse, Macro, ImCompleteSemanticToken};
+use hex_language_server::hex_parsing::{parse, Macro, ImCompleteSemanticToken, AST};
 use hex_language_server::completion::completion;
 use hex_language_server::jump_definition::get_definition;
 use hex_language_server::reference::get_reference;
@@ -14,7 +14,7 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 #[derive(Debug)]
 struct Backend {
 	client: Client,
-	ast_map: DashMap<String, HashMap<String, Macro>>,
+	ast_map: DashMap<String, AST>,
 	document_map: DashMap<String, Rope>,
 	semantic_token_map: DashMap<String, Vec<ImCompleteSemanticToken>>,
 }
@@ -479,8 +479,8 @@ impl Backend {
 			.publish_diagnostics(params.uri.clone(), diagnostics, Some(params.version))
 			.await;
 
-		if let Some((macros_by_name, macros_by_pattern, main_body)) = ast {
-			self.ast_map.insert(params.uri.to_string(), macros_by_name);
+		if let Some(ast) = ast {
+			self.ast_map.insert(params.uri.to_string(), ast);
 		}
 		// self.client
 		//     .log_message(MessageType::INFO, &format!("{:?}", semantic_tokens))

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use tower_lsp::lsp_types::{SemanticTokenType};
 
-use crate::hex_parsing::{Expr, Macro, ImCompleteSemanticToken, Spanned};
+use crate::hex_parsing::{Expr, Macro, ImCompleteSemanticToken, Spanned, AST};
 
 pub const LEGEND_TYPE: &[SemanticTokenType] = &[
     SemanticTokenType::FUNCTION,
@@ -16,10 +16,10 @@ pub const LEGEND_TYPE: &[SemanticTokenType] = &[
 		SemanticTokenType::ENUM_MEMBER
 ];
 
-pub fn semantic_token_from_ast(ast: &HashMap<String, Macro>) -> Vec<ImCompleteSemanticToken> {
+pub fn semantic_token_from_ast(ast: &AST) -> Vec<ImCompleteSemanticToken> {
     let mut semantic_tokens = vec![];
 
-    ast.iter().for_each(|(_func_name, function)| {
+    ast.macros_by_name.iter().for_each(|(_func_name, function)| {
         function.args.iter().for_each(|(_, span)| {
             semantic_tokens.push(ImCompleteSemanticToken {
                 start: span.start,
@@ -53,8 +53,8 @@ pub fn semantic_token_from_expr(
         Expr::Error => {}
         Expr::Value(_) => {}
         Expr::List(_) => {}
-        Expr::Consideration(_) => todo!(),
-        Expr::IntroRetro(_) => todo!(),
-        Expr::ConsideredIntroRetro(_) => todo!(),
+        Expr::Consideration(_) => {},
+        Expr::IntroRetro(_) => {},
+        Expr::ConsideredIntroRetro(_) => {},
     }
 }

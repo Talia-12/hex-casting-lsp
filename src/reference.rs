@@ -69,10 +69,10 @@ pub fn get_reference_of_expr(
 ) {
 	match &expr.0 {
 		Expr::Error => {}
-		Expr::Value(_) => todo!(),
-		Expr::List(_) => todo!(),
-		Expr::Consideration(_) => todo!(),
-		Expr::IntroRetro(_) => todo!(),
-		Expr::ConsideredIntroRetro(_) => todo!(),
+		Expr::Value(_) => {},
+		Expr::List(_) => {},
+		Expr::Consideration(_) => {},
+		Expr::IntroRetro(_) => {},
+		Expr::ConsideredIntroRetro(_) => {},
 	}
 }

@@ -4,14 +4,14 @@ use im_rc::Vector;
 use log::debug;
 use tower_lsp::{lsp_types::MessageType, Client};
 
-use crate::hex_parsing::{Expr, Macro, Spanned};
+use crate::hex_parsing::{Expr, Macro, Spanned, AST};
 /// return (need_to_continue_search, founded reference)
 pub fn get_definition(
-    ast: &HashMap<String, Macro>,
+    ast: &AST,
     ident_offset: usize,
 ) -> Option<Spanned<String>> {
     let mut vector = Vector::new();
-    for (_, v) in ast.iter() {
+    for (_, v) in ast.macros_by_name.iter() {
         if v.name.1.start < ident_offset && v.name.1.end > ident_offset {
             return Some(v.name.clone());
         }
@@ -20,7 +20,7 @@ pub fn get_definition(
         }
     }
 
-    for (_, v) in ast.iter() {
+    for (_, v) in ast.macros_by_name.iter() {
         let args = v.args.iter().map(|arg| arg.clone()).collect::<Vector<_>>();
         match get_definition_of_expr(&v.body, args + vector.clone(), ident_offset) {
             (_, Some(value)) => {
@@ -39,10 +39,10 @@ pub fn get_definition_of_expr(
 ) -> (bool, Option<Spanned<String>>) {
     match &expr.0 {
         Expr::Error => (true, None),
-        Expr::Value(_) => todo!(),
+        Expr::Value(_) => (true, None),
         Expr::List(exprs) => (true, None),
         Expr::Consideration(_) => (true, None),
         Expr::IntroRetro(_) => (true, None),
-        Expr::ConsideredIntroRetro(_) => todo!(),
+        Expr::ConsideredIntroRetro(_) => (true, None),
     }
 }

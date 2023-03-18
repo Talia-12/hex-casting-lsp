@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 
-use crate::hex_parsing::{Expr, Macro, Spanned};
+use crate::hex_parsing::{Expr, Macro, Spanned, AST};
 pub enum ImCompleteCompletionItem {
     Variable(String),
     Function(String, Vec<String>),
 }
 /// return (need_to_continue_search, founded reference)
 pub fn completion(
-    ast: &HashMap<String, Macro>,
+    ast: &AST,
     ident_offset: usize,
 ) -> HashMap<String, ImCompleteCompletionItem> {
     let mut map = HashMap::new();
-    for (_, v) in ast.iter() {
+    for (_, v) in ast.macros_by_name.iter() {
         if v.name.1.end < ident_offset {
             map.insert(
                 v.name.0.clone(),
@@ -24,7 +24,7 @@ pub fn completion(
     }
 
     // collect params variable
-    for (_, v) in ast.iter() {
+    for (_, v) in ast.macros_by_name.iter() {
         if v.span.end > ident_offset && v.span.start < ident_offset {
             // log::debug!("this is completion from body {}", name);
             v.args.iter().for_each(|(item, _)| {
@@ -59,8 +59,8 @@ pub fn get_completion_of(
             }
             true
         }
-        Expr::Consideration(_) => todo!(),
-        Expr::IntroRetro(_) => todo!(),
-        Expr::ConsideredIntroRetro(_) => todo!(),
+        Expr::Consideration(_) => true,
+        Expr::IntroRetro(_) => true,
+        Expr::ConsideredIntroRetro(_) => true,
     }
 }
