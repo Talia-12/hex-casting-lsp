@@ -4,7 +4,7 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 
 #[derive(PartialEq, Eq, Hash, Debug)]
-pub enum HexError {
+pub enum HexPatternError {
 	Overlap,
 	InvalidString,
 	UnkownPatternName
@@ -128,16 +128,21 @@ impl HexDir {
 		}
 	}
 
-	pub fn from_str(str: &str) -> Vec<HexDir> {
-		str.chars().filter_map(|c| match c {
-			 'a' => Some(HexDir::A),
-			 'q' => Some(HexDir::Q),
-			 'w' => Some(HexDir::W),
-			 'e' => Some(HexDir::E),
-			 'd' => Some(HexDir::D),
-			 's' => Some(HexDir::S),
-			 _ => None
-		}).collect()
+	pub fn from_str(str: &str) -> Result<Vec<HexDir>, HexPatternError> {
+		let lower = str.to_lowercase();
+		if !lower.chars().all(|c| c == 'a' || c == 'q' || c == 'w' || c == 'e' || c == 'd' || c == 's') {
+			Err(HexPatternError::InvalidString)
+		} else {
+			Ok(lower.chars().map(|c| match c {
+				'a' => HexDir::A,
+				'q' => HexDir::Q,
+				'w' => HexDir::W,
+				'e' => HexDir::E,
+				'd' => HexDir::D,
+				's' => HexDir::S,
+				_ => panic!()
+			}).collect())
+		}
 	}
 }
 

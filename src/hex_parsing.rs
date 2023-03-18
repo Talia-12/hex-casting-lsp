@@ -1,6 +1,7 @@
 use chumsky::Parser;
 use chumsky::Stream;
 use chumsky::prelude::*;
+use chumsky::text::newline;
 use num_traits::ToPrimitive;
 use core::fmt;
 use std::collections::HashMap;
@@ -36,7 +37,6 @@ pub enum Token {
 	Str(String),
 	Ctrl(char),
 	HexAbsoluteDir(HexAbsoluteDir),
-	HexDirs(String),
 	Bookkeepers(String),
 	Ident(String),
 	Comment(String),
@@ -71,7 +71,6 @@ impl fmt::Display for Token {
 			Token::Str(s) => write!(f, "{}", s),
 			Token::Ctrl(c) => write!(f, "{}", c),
 			Token::HexAbsoluteDir(dir) => write!(f, "{}", dir),
-			Token::HexDirs(dirs) => write!(f, "{}", dirs),
 			Token::Bookkeepers(s) => write!(f, "{}", s),
 			Token::Ident(s) => write!(f, "{}", s),
 			Token::Comment(s) => write!(f, "{}", s),
@@ -118,21 +117,13 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 		.map(Token::Str);
 
 	// A parser for control characters (delimiters, colons, etc.)
-	let ctrl = one_of("()[]{},;:#=\n").map(|c| Token::Ctrl(c));
+	let ctrl = one_of("()[]{},;:#=").or(newline().map(|_| '\n')).map(|c| Token::Ctrl(c));
 
 	// A parser for ops
 	let ops = just("->").map(|_| Token::Arrow);
 
 	// A parser for bookkeeper's gambit
 	let bookkeeper = one_of("-v").repeated().at_least(1).collect().map(Token::Bookkeepers);
-
-	let hexdirs = ident().try_map(|str, span| {
-		if str.len() == 0 {
-			return Err(Simple::expected_input_found(span, Vec::new(), Some(' ')))
-		}
-
-		return if str.chars().all(|c| "aqweds".contains(c)) { Ok(str) } else { Err(Simple::expected_input_found(span, Vec::new(), Some(str.chars().find(|&c| !"aqweds".contains(c)).unwrap()))) } 
-	}).map(Token::HexDirs);
 
 	// A parser for identifiers and keywords
 	let ident = ident().map(|ident: String| match ident.as_str() {
@@ -168,7 +159,6 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 		.or(ctrl)
 		.or(ops)
 		.or(bookkeeper)
-		.or(hexdirs)
 		.or(ident)
 		.or(single_comment)
 		.or(multi_comment)
@@ -249,8 +239,14 @@ fn hex_pattern_from_signature() -> impl Parser<Token, HexPatternIota, Error = Si
 			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
 		})
 		.then_ignore(just(Token::Ctrl(',')).or_not())
-		.then(filter_map(|span, tok| match tok {
-			Token::HexDirs(dirs) => Ok(HexDir::from_str(&dirs)),
+		.then(filter_map(|span, tok: Token| match tok.clone() {
+			Token::Ident(dirs) => HexDir::from_str(&dirs).map_err(|err|
+				Simple::expected_input_found(
+					span,
+					vec![Some(Token::Ident(format!("Error getting pattern dirs from {dirs}")))],
+					Some(tok)
+				)
+			),
 			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
 		}))
 		.map(|(start_dir, dirs)| HexPattern::new(start_dir, dirs));
@@ -500,25 +496,28 @@ pub fn macros_parser() -> impl Parser<Token, (HashMap<String, Macro>, HashMap<He
 			(name.clone(), pattern.clone(), Macro { args, return_type, body, name, pattern, span  })
 		});
 
-	macro_parser.then_ignore(just(Token::Ctrl('\n')).repeated()).repeated().collect::<Vec<_>>().try_map(|ms: Vec<(Spanned<String>, Spanned<HexPattern>, Macro)>, _| {
-		let mut macros_by_name = HashMap::new();
-		let mut macros_by_pattern = HashMap::new();
+	just(Token::Ctrl('\n')).repeated()
+		.ignore_then(macro_parser)
+		.then_ignore(just(Token::Ctrl('\n')).repeated()).repeated().collect::<Vec<_>>().try_map(|ms: Vec<(Spanned<String>, Spanned<HexPattern>, Macro)>, _| {
+			let mut macros_by_name = HashMap::new();
+			let mut macros_by_pattern = HashMap::new();
 
-		for ((name, name_span), (pattern, pattern_span), m) in ms {
-			if macros_by_name.insert(name.clone(), m.clone()).is_some() {
-				return Err(Simple::expected_input_found(name_span, vec![Some(Token::Ident(format!("Macro '{name}' already exists")))], Some(Token::Arrow)));
+			for ((name, name_span), (pattern, pattern_span), m) in ms {
+				if macros_by_name.insert(name.clone(), m.clone()).is_some() {
+					return Err(Simple::expected_input_found(name_span, vec![Some(Token::Ident(format!("Macro '{name}' already exists")))], Some(Token::Arrow)));
+				}
+				if macros_by_pattern.insert(pattern.clone(), m).is_some() {
+					return Err(Simple::expected_input_found(pattern_span, vec![Some(Token::Ident(format!("Macro with pattern '{pattern}' already exists")))], Some(Token::Arrow)));
+				}
 			}
-			if macros_by_pattern.insert(pattern.clone(), m).is_some() {
-				return Err(Simple::expected_input_found(pattern_span, vec![Some(Token::Ident(format!("Macro with pattern '{pattern}' already exists")))], Some(Token::Arrow)));
-			}
-		}
 
-		Ok((macros_by_name, macros_by_pattern))
-	})
+			Ok((macros_by_name, macros_by_pattern))
+		})
 }
 
 pub fn main_parser() -> impl Parser<Token, (HashMap<String, Macro>, HashMap<HexPattern, Macro>, Option<Spanned<Expr>>), Error = Simple<Token>> + Clone {
 	macros_parser()
+		.then_ignore(just(Token::Ctrl('\n')).repeated())
 		.then(expr_parser().or_not())
 		.map(|((macros_by_name, macros_by_pattern), main_body)| (macros_by_name, macros_by_pattern, main_body))
 }
@@ -573,14 +572,6 @@ pub fn parse(
 				}),
 				Token::Ctrl(_) => None,
 				Token::HexAbsoluteDir(_) => Some(ImCompleteSemanticToken {
-					start: span.start,
-					length: span.len(),
-					token_type: LEGEND_TYPE
-						.iter()
-						.position(|item| item == &SemanticTokenType::ENUM_MEMBER)
-						.unwrap(),
-				}),
-				Token::HexDirs(_) => Some(ImCompleteSemanticToken {
 					start: span.start,
 					length: span.len(),
 					token_type: LEGEND_TYPE
@@ -731,7 +722,9 @@ pub fn parse(
 
 #[cfg(test)]
 mod test {
-	use crate::{hex_pattern::{HexAbsoluteDir, HexDir}, pattern_name_registry::{StatOrDynRegistryEntry, RegistryEntry, registry_entry_from_id, registry_entry_from_name}};
+	use std::{fs::File, io::{BufWriter, Write}};
+
+use crate::{hex_pattern::{HexAbsoluteDir, HexDir}, pattern_name_registry::{StatOrDynRegistryEntry, RegistryEntry, registry_entry_from_id, registry_entry_from_name}};
 
 	use super::*;
 
@@ -816,7 +809,7 @@ return vec![
 				Token::Ctrl('}')],
 			vec![
 				Token::Ctrl('#'), Token::Define, Token::Ident("New".to_string()), Token::Ident("Distillation".to_string()),
-					Token::Ctrl('('), Token::HexAbsoluteDir(HexAbsoluteDir::SouthEast), Token::HexDirs("aqwed".to_string()), Token::Ctrl(')'),
+					Token::Ctrl('('), Token::HexAbsoluteDir(HexAbsoluteDir::SouthEast), Token::Ident("aqwed".to_string()), Token::Ctrl(')'),
 					Token::Ctrl('='), Token::Ident("int".to_string()), Token::Ctrl(','), Token::Ident("int".to_string()), Token::Arrow, Token::Ident("int".to_string()),  Token::Ctrl('{'),  Token::Ctrl('\n'),
 					Token::Ident("Bookkeeper's".to_string()), Token::Ident("Gambit".to_string()), Token::Ctrl(':'), Token::Bookkeepers("v-".to_string()), Token::Ctrl('\n'),
 				Token::Ctrl('}'), Token::Ctrl('\n'),
@@ -1038,5 +1031,34 @@ return vec![
 
 			assert_eq!(ast, output)
 		}
+	}
+
+	#[test]
+	fn test_asdf() {
+    let source = include_str!("../examples/stronghold_finder.nrs");
+		
+		{
+			let (tokens, errs) = lexer().parse_recovery(source);
+
+			{
+				let file = File::create("examples/stronghold_finder_parsed.txt").unwrap();
+				let mut writer = BufWriter::new(file);
+
+				writer.write(
+					format!("{tokens:#?}").as_bytes()
+				).unwrap();
+			}
+		}
+		
+		println!("asdf_source: {:?}", &source);
+    let (ast, errors, semantic_tokens) = parse(source);
+		println!("asdf_errors: {:?}", errors);
+    if let Some(ref ast) = ast {
+        println!("asdf_ast: {:#?}", ast);
+    } else {
+        println!("asdf_errors: {:?}", errors);
+    }
+    println!("asdf_semantic_tokens: {:?}", semantic_tokens);
+		panic!()
 	}
 }

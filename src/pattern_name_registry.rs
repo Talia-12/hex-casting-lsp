@@ -186,7 +186,12 @@ impl Display for RegistryEntry {
 impl RegistryEntry {
 	fn from_raw(raw: RawRegistryEntry, name: String) -> Result<RegistryEntry, PatternNameRegistryError> {
 		let pattern = raw.pattern.clone().and_then(|pattern|
-			raw.direction.clone().and_then(|direction| HexAbsoluteDir::from_str(&direction).map(|dir| HexPattern::new(dir, HexDir::from_str(&pattern))))
+			raw.direction.clone()
+				.and_then(|direction|
+					HexAbsoluteDir::from_str(&direction)
+				).and_then(|dir| {
+					HexDir::from_str(&pattern).map(|dirs| HexPattern::new(dir, dirs)).ok()
+				})
 		);
 
 		Ok(RegistryEntry { name, id: raw.id, mod_name: raw.mod_name, pattern, args: raw.args, url: raw.url })
