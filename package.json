@@ -1,6 +1,6 @@
 {
-  "name": "nrs-language-server",
-  "description": "nano rust language server",
+  "name": "hex-language-server",
+  "description": "hex language server",
   "license": "MIT",
   "version": "1.5.0",
   "categories": [],
@@ -9,7 +9,7 @@
     "tower-lsp"
   ],
   "repository": {
-    "url": "https://github.com/IWANABETHATGUY/tower-lsp-boilerplate"
+    "url": "https://github.com/Talia-12/hex-casting-lsp"
   },
   "engines": {
     "vscode": "^1.66.0"
@@ -30,9 +30,9 @@
     ],
     "configuration": {
       "type": "object",
-      "title": "nrs-language-server",
+      "title": "hex-language-server",
       "properties": {
-        "nrs-language-server.trace.server": {
+        "hex-language-server.trace.server": {
           "type": "string",
           "scope": "window",
           "enum": [

@@ -50,8 +50,9 @@ export async function activate(context: ExtensionContext) {
 
   context.subscriptions.push(disposable);
 
-  const traceOutputChannel = window.createOutputChannel("Nrs Language Server trace");
-  const command = process.env.SERVER_PATH || "nrs-language-server";
+  const traceOutputChannel = window.createOutputChannel("Hex Language Server trace");
+  const command = process.env.SERVER_PATH || "hex-language-server";
+
   const run: Executable = {
     command,
     options: {
@@ -80,7 +81,7 @@ export async function activate(context: ExtensionContext) {
   };
 
   // Create the language client and start the client.
-  client = new LanguageClient("nrs-language-server", "nrs language server", serverOptions, clientOptions);
+  client = new LanguageClient("hex-language-server", "hex language server", serverOptions, clientOptions);
   // activateInlayHints(context);
   client.start();
 }
