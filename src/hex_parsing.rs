@@ -515,11 +515,24 @@ pub fn macros_parser() -> impl Parser<Token, (HashMap<String, Macro>, HashMap<He
 		})
 }
 
-pub fn main_parser() -> impl Parser<Token, (HashMap<String, Macro>, HashMap<HexPattern, Macro>, Option<Spanned<Expr>>), Error = Simple<Token>> + Clone {
+#[derive(Debug, PartialEq, Clone)]
+pub struct AST {
+	pub macros_by_name: HashMap<String, Macro>,
+	pub macros_by_pattern: HashMap<HexPattern, Macro>,
+	pub main: Option<Spanned<Expr>>
+}
+
+impl From<(HashMap<String, Macro>, HashMap<HexPattern, Macro>, Option<Spanned<Expr>>)> for AST {
+	fn from((macros_by_name, macros_by_pattern,main): (HashMap<String, Macro>, HashMap<HexPattern, Macro>, Option<Spanned<Expr>>)) -> Self {
+		AST { macros_by_name, macros_by_pattern, main }
+	}
+}
+
+pub fn main_parser() -> impl Parser<Token, AST, Error = Simple<Token>> + Clone {
 	macros_parser()
 		.then_ignore(just(Token::Ctrl('\n')).repeated())
 		.then(expr_parser().or_not())
-		.map(|((macros_by_name, macros_by_pattern), main_body)| (macros_by_name, macros_by_pattern, main_body))
+		.map(|((macros_by_name, macros_by_pattern), main_body)| (macros_by_name, macros_by_pattern, main_body).into())
 }
 
 pub(crate) struct Error {
@@ -530,7 +543,7 @@ pub(crate) struct Error {
 pub fn parse(
 	src: &str,
 ) -> (
-	Option<(HashMap<String, Macro>, HashMap<HexPattern, Macro>, Option<Spanned<Expr>>)>,
+	Option<AST>,
 	Vec<Simple<String>>,
 	Vec<ImCompleteSemanticToken>,
 ) {
@@ -942,7 +955,7 @@ return vec![
 		let numerical_reflection_0 = registry_entry_from_name("Numerical Reflection: 0").unwrap();
 		let numerical_reflection_1 = registry_entry_from_name("Numerical Reflection: 1").unwrap();
 
-		let test_outputs: Vec<(HashMap<String, Macro>, HashMap<HexPattern, Macro>, Option<Spanned<Expr>>)> = vec![
+		let test_outputs: Vec<AST> = vec![
 			(HashMap::new(), HashMap::new(), Some((
 				Expr::IntroRetro(vec![
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 3..21),
@@ -952,7 +965,7 @@ return vec![
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(archers_distillation.clone()))), 88..110),
 				]),
 				0..111
-			))),
+			))).into(),
 			(HashMap::new(), HashMap::new(), Some((
 				Expr::IntroRetro(vec![
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 97..115),
@@ -960,7 +973,7 @@ return vec![
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(blink.clone()))), 136..142),
 				]),
 				0..143
-			))),
+			))).into(),
 			(HashMap::new(), HashMap::new(), Some((
 				Expr::IntroRetro(vec![
 					(Expr::ConsideredIntroRetro(vec![
@@ -975,7 +988,7 @@ return vec![
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(thoths_gambit.clone()))), 116..131),
 				]),
 				0..132
-			))),
+			))).into(),
 			({
 				let mut map = HashMap::new();
 				map.insert("New Distillation".to_string(), Macro {
@@ -1016,7 +1029,7 @@ return vec![
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(reveal.clone()))), 162..169),
 				]),
 				91..170
-			))),
+			))).into(),
 		];
 
 		for (input, output) in test_inputs.iter().zip(test_outputs) {
