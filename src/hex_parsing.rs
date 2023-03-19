@@ -184,7 +184,7 @@ pub enum Expr {
 	Error,
 	Value(Iota),
 	List(Vec<Spanned<Self>>),
-	Consideration(Box<Spanned<Self>>),
+	Consideration(Box<Spanned<Self>>, Span),
 	IntroRetro(Vec<Spanned<Self>>),
 	ConsideredIntroRetro(Vec<Spanned<Self>>),
 }
@@ -398,12 +398,12 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 				.or(list.clone())
 				.map_with_span(|considerable, span| (considerable, span));
 
-			let consideration = just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':')]).try_map(|_, span|
+			let consideration = just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':')]).try_map(|_, span: Span|
 					pattern_name_registry::get_consideration()
-						.map(|consideration| HexPatternIota::RegistryEntry(consideration))
+						.map(|consideration| (HexPatternIota::RegistryEntry(consideration), span.clone()))
 						.map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
 				).then(considerable)
-				.map(|(_, (expr, expr_span)): (HexPatternIota, Spanned<Expr>)| Expr::Consideration(Box::new((expr, expr_span))));
+				.map(|((_, consideration_span), (expr, expr_span)): (Spanned<HexPatternIota>, Spanned<Expr>)| Expr::Consideration(Box::new((expr, expr_span)), consideration_span));
 
 			// 'Atoms' are expressions that contain no ambiguity
 			let atom = consideration
@@ -956,7 +956,7 @@ return vec![
 			(HashMap::new(), HashMap::new(), Some((
 				Expr::IntroRetro(vec![
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection.clone()))), 97..115),
-					(Expr::Consideration(Box::new((Expr::Value(Iota::Num(5.0)), 131..135))), 116..135),
+					(Expr::Consideration(Box::new((Expr::Value(Iota::Num(5.0)), 131..135)), 116..130), 116..135),
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(blink.clone()))), 136..142),
 				]),
 				0..143
@@ -971,7 +971,7 @@ return vec![
 						(Expr::Value(Iota::Num(1.1)), 91..97),
 						(Expr::Value(Iota::Num(2.2)), 98..104),
 						(Expr::Value(Iota::Num(3.3)), 105..112),
-					]), 63..114))), 48..114),
+					]), 63..114)), 48..62), 48..114),
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(thoths_gambit.clone()))), 116..131),
 				]),
 				0..132

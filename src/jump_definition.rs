@@ -41,7 +41,7 @@ pub fn get_definition_of_expr(
         Expr::Error => (true, None),
         Expr::Value(_) => (true, None),
         Expr::List(exprs) => (true, None),
-        Expr::Consideration(_) => (true, None),
+        Expr::Consideration(_, _) => (true, None),
         Expr::IntroRetro(_) => (true, None),
         Expr::ConsideredIntroRetro(_) => (true, None),
     }

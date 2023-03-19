@@ -465,7 +465,9 @@ fn get_atom_of_expr(exprspan: &Spanned<Expr>, offset: usize) -> Option<&Spanned<
 			}
 			None
 		},
-    Expr::Consideration(considered) => get_atom_of_expr(&considered, offset),
+    Expr::Consideration(considered, consideration_span) => if consideration_span.start <= offset && offset < consideration_span.end {
+			Some(exprspan)
+		} else { get_atom_of_expr(&considered, offset) },
     Expr::IntroRetro(intro_retrod) => {
 			for expr in intro_retrod {
 				if let Some(expr) = get_atom_of_expr(expr, offset) {

@@ -59,7 +59,7 @@ pub fn get_completion_of(
             }
             true
         }
-        Expr::Consideration(_) => true,
+        Expr::Consideration(_, _) => true,
         Expr::IntroRetro(_) => true,
         Expr::ConsideredIntroRetro(_) => true,
     }

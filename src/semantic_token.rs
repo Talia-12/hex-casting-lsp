@@ -57,7 +57,7 @@ pub fn semantic_token_from_expr(
         Expr::Error => {}
         Expr::Value(_) => {}
         Expr::List(_) => {}
-        Expr::Consideration(_) => {},
+        Expr::Consideration(_, _) => {},
         Expr::IntroRetro(_) => {},
         Expr::ConsideredIntroRetro(_) => {},
     }

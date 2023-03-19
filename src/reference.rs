@@ -71,7 +71,7 @@ pub fn get_reference_of_expr(
 		Expr::Error => {}
 		Expr::Value(_) => {},
 		Expr::List(_) => {},
-		Expr::Consideration(_) => {},
+		Expr::Consideration(_, _) => {},
 		Expr::IntroRetro(_) => {},
 		Expr::ConsideredIntroRetro(_) => {},
 	}
