@@ -1,0 +1,41 @@
+{
+    "comments": {
+        // symbol used for single line comment
+        "lineComment": "//",
+        // symbols used for start and end of a block comment
+        "blockComment": ["/*", "*/"]
+    },
+    // symbols used as brackets
+    "brackets": [
+        ["{", "}"],
+        ["[", "]"]
+    ],
+    "autoClosingPairs": [
+        ["{", "}"],
+        ["[", "]"],
+        ["(", ")"],
+        ["/*", "*/"]
+    ],
+    "onEnterRules": [
+        {
+            "beforeText": "/\\*",
+            "afterText": "\\*/",
+            "action": {
+                "indent": "indentOutdent",
+                // this SHOULD just not append anything, including indentation
+                "appendText": "\r"
+            }
+        },
+        {
+            "beforeText": "//.*[\\[{]",
+            "action": {
+                "indent": "none"
+            }
+        }
+    ],
+    "wordPattern": "(?<=^\\s*)Consideration:|(?<=^\\s*(?:Consideration: )?)(?!//|/\\*| )[a-zA-Z0-9:'+\\-./ _]+?(?= *(?://|/\\*|$))",
+    "indentationRules": {
+        "increaseIndentPattern": "(?<!//.*)[\\[{]",
+        "decreaseIndentPattern": "(?<!//.*)[\\]}]"
+    }
+}

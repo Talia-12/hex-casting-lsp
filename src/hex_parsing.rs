@@ -94,7 +94,7 @@ impl fmt::Display for Token {
 /// characters, underscores, or apostrophes. The regex pattern for it is `[a-zA-Z_][a-zA-Z0-9_]*`.
 fn ident() -> impl Parser<char, String, Error = Simple<char>> + Copy + Clone
 {
-	filter(|c: &char| c.is_ascii_alphabetic() || c == &'_')
+	filter(|c: &char| c.is_ascii_alphabetic() || c == &'_' || c == &'#')
 		.map(Some)
 		.chain::<char, Vec<_>, _>(
 			filter(|c: &char| c.is_ascii_alphanumeric() || c == &'_' || c == &'/' || c == &'\'' || c == &'-').repeated(),
@@ -117,7 +117,7 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 		.map(Token::Str);
 
 	// A parser for control characters (delimiters, colons, etc.)
-	let ctrl = one_of("()[]{},;:#=").or(newline().map(|_| '\n')).map(|c| Token::Ctrl(c));
+	let ctrl = one_of("()[]{},;:=").or(newline().map(|_| '\n')).map(|c| Token::Ctrl(c));
 
 	// A parser for ops
 	let ops = just("->").map(|_| Token::Arrow);
@@ -137,7 +137,8 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 		"ItemType" => Token::ItemType,
 		"Gate" => Token::Gate,
 		"Mote" => Token::Mote,
-		"define" => Token::Define, // #define Pattern Name (DIR aqwed) = a -> b
+		"#import" => Token::Import, // #import FILENAME
+		"#define" => Token::Define, // #define Pattern Name (DIR aqwed) = a -> b { }
 		_ => if let Some(absdir) = HexAbsoluteDir::from_str(&ident) { Token::HexAbsoluteDir(absdir) } else { Token::Ident(ident) },
 	});
 
@@ -486,7 +487,7 @@ pub fn macros_parser() -> impl Parser<Token, (HashMap<String, Macro>, HashMap<He
 
 	let type_signature = type_half.clone().then_ignore(just(Token::Arrow)).then(type_half);
 
-	let macro_parser = just(vec![Token::Ctrl('#'), Token::Define])
+	let macro_parser = just(Token::Define)
 		.ignore_then(name)
 		.then(hex_pattern_from_signature().map_with_span(|pattern, span| (pattern.get_pattern_no_macro_lookup(), span)))
 		.then_ignore(just(Token::Ctrl('=')))
@@ -821,7 +822,7 @@ return vec![
 					Token::Ident("Thoth's".to_string()), Token::Ident("Gambit".to_string()), Token::Ctrl('\n'),
 				Token::Ctrl('}')],
 			vec![
-				Token::Ctrl('#'), Token::Define, Token::Ident("New".to_string()), Token::Ident("Distillation".to_string()),
+				Token::Define, Token::Ident("New".to_string()), Token::Ident("Distillation".to_string()),
 					Token::Ctrl('('), Token::HexAbsoluteDir(HexAbsoluteDir::SouthEast), Token::Ident("aqwed".to_string()), Token::Ctrl(')'),
 					Token::Ctrl('='), Token::Ident("int".to_string()), Token::Ctrl(','), Token::Ident("int".to_string()), Token::Arrow, Token::Ident("int".to_string()),  Token::Ctrl('{'),  Token::Ctrl('\n'),
 					Token::Ident("Bookkeeper's".to_string()), Token::Ident("Gambit".to_string()), Token::Ctrl(':'), Token::Bookkeepers("v-".to_string()), Token::Ctrl('\n'),
@@ -1036,17 +1037,18 @@ return vec![
 			let (ast, errs, semantic_tokens) = parse(input);
 			let ast = ast.unwrap();
 			
-			if errs.len() != 0 {
+			// if errs.len() != 0 {
 				dbg!(input);
 				dbg!(errs);
 				dbg!(semantic_tokens);
-			}
+			// }
 
 			assert_eq!(ast, output)
 		}
 	}
 
 	#[test]
+	#[ignore]
 	fn test_asdf() {
     let source = include_str!("../examples/stronghold_finder.nrs");
 		

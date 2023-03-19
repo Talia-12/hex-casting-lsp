@@ -19,8 +19,8 @@ pub const LEGEND_TYPE: &[SemanticTokenType] = &[
 pub fn semantic_token_from_ast(ast: &AST) -> Vec<ImCompleteSemanticToken> {
     let mut semantic_tokens = vec![];
 
-    ast.macros_by_name.iter().for_each(|(_func_name, function)| {
-        function.args.iter().for_each(|(_, span)| {
+    ast.macros_by_name.iter().for_each(|(_func_name, hex_macro)| {
+        hex_macro.args.iter().for_each(|(_, span)| {
             semantic_tokens.push(ImCompleteSemanticToken {
                 start: span.start,
                 length: span.len(),
@@ -30,7 +30,7 @@ pub fn semantic_token_from_ast(ast: &AST) -> Vec<ImCompleteSemanticToken> {
                     .unwrap(),
             });
         });
-        let (_, span) = &function.name;
+        let (_, span) = &hex_macro.name;
         semantic_tokens.push(ImCompleteSemanticToken {
             start: span.start,
             length: span.len(),
@@ -39,8 +39,12 @@ pub fn semantic_token_from_ast(ast: &AST) -> Vec<ImCompleteSemanticToken> {
                 .position(|item| item == &SemanticTokenType::FUNCTION)
                 .unwrap(),
         });
-        semantic_token_from_expr(&function.body, &mut semantic_tokens);
+        semantic_token_from_expr(&hex_macro.body, &mut semantic_tokens);
     });
+
+		if let Some(main) = &ast.main {
+			semantic_token_from_expr(main, &mut semantic_tokens)
+		}
 
     semantic_tokens
 }

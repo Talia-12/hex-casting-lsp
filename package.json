@@ -25,7 +25,8 @@
         "id": "nrs",
         "extensions": [
           ".nrs"
-        ]
+        ],
+				"configuration": "./client/language-configuration.json"
       }
     ],
     "configuration": {
