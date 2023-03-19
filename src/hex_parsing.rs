@@ -225,11 +225,11 @@ impl Expr {
 // A function node in the AST. (macro)
 #[derive(Debug, Clone, PartialEq)]
 pub struct Macro {
+	pub name: Spanned<String>,
+	pub pattern: Spanned<HexPattern>,
 	pub args: Vec<Spanned<String>>,
 	pub return_type: Vec<Spanned<String>>,
 	pub body: Spanned<Expr>,
-	pub name: Spanned<String>,
-	pub pattern: Spanned<HexPattern>,
 	pub span: Span,
 }
 
@@ -398,26 +398,12 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 				.or(list.clone())
 				.map_with_span(|considerable, span| (considerable, span));
 
-			let consideration = hex_pattern_from_signature().or(
-				just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':')]).try_map(|_, span|
+			let consideration = just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':')]).try_map(|_, span|
 					pattern_name_registry::get_consideration()
 						.map(|consideration| HexPatternIota::RegistryEntry(consideration))
 						.map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
-				)
-			).clone()
-				.then(considerable)
-				.try_map(|(pattern, (expr, expr_span)): (HexPatternIota, Spanned<Expr>), span| {
-					let consideration = pattern_name_registry::get_consideration();
-					if let Ok(consideration) = consideration {
-						if Some(pattern.get_pattern_no_macro_lookup()) == consideration.get_pattern() {
-							Ok(Expr::Consideration(Box::new((expr, expr_span))))
-						} else {
-							Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern_no_macro_lookup().to_string()))))
-						}
-					} else {
-						Err(Simple::expected_input_found(span, vec![Some(Token::Ident("Consideration".to_string()))], Some(Token::Ident(pattern.get_pattern_no_macro_lookup().to_string()))))
-					}
-				});
+				).then(considerable)
+				.map(|(_, (expr, expr_span)): (HexPatternIota, Spanned<Expr>)| Expr::Consideration(Box::new((expr, expr_span))));
 
 			// 'Atoms' are expressions that contain no ambiguity
 			let atom = consideration

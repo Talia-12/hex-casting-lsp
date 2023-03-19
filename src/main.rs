@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
+use chumsky::Span;
 use dashmap::DashMap;
-use hex_language_server::hex_parsing::{parse, Macro, ImCompleteSemanticToken, AST};
+use hex_language_server::hex_parsing::{parse, Macro, ImCompleteSemanticToken, AST, Expr, Spanned};
 use hex_language_server::completion::completion;
 use hex_language_server::jump_definition::get_definition;
 use hex_language_server::reference::get_reference;
@@ -403,11 +404,84 @@ impl LanguageServer for Backend {
 			let position = params.text_document_position_params.position;
 			let char = rope.try_line_to_char(position.line as usize).ok()?;
 			let offset = char + position.character as usize;
-			let reference_list = get_reference(&ast, offset, true);
+			let atom = get_ast_atom(&ast, offset);
 			
-			Some(Hover { contents: HoverContents::Scalar(MarkedString::String(format!("count: {:?}", reference_list).to_string())), range: None })
+			Some(Hover { contents: HoverContents::Scalar(MarkedString::String(format!("ast atom: {:?}", atom).to_string())), range: None })
 		}.await;
 		Ok(hover)
+	}
+}
+
+fn get_ast_atom(ast: &AST, offset: usize) -> Option<Spanned<String>> {
+	let mut kv_list = ast.macros_by_name.iter().collect::<Vec<_>>();
+	kv_list.sort_by(|a, b| a.1.name.start().cmp(&b.1.name.start()));
+	// let mut fn_vector = Vector::new();
+	for (_, v) in kv_list {
+		let (_, range) = &v.name;
+		if offset >= range.start && offset < range.end {
+			return Some(v.name.clone())
+		};
+
+		let (pattern, range) = &v.pattern;
+		if range.start <= offset && offset <= range.end {
+			return Some((pattern.to_string(), range.clone()))
+		} 
+
+		for arg in &v.args {
+			if offset >= arg.1.start && offset < arg.1.end {
+				return Some(arg.clone())
+			}
+		}
+
+		for return_type in &v.return_type {
+			if offset >= return_type.1.start && offset < return_type.1.end {
+				return Some(return_type.clone())
+			}
+		}
+		
+		if let Some((expr, span)) = get_atom_of_expr(&v.body, offset) {
+			return Some((format!("{expr:?}"), span.clone()))
+		}
+	}
+
+	if let Some(main) = &ast.main {
+		if let Some((expr, span)) = get_atom_of_expr(&main, offset) {
+			return Some((format!("{expr:?}"), span.clone()))
+		}
+	}
+	
+	None
+}
+
+fn get_atom_of_expr(exprspan: &Spanned<Expr>, offset: usize) -> Option<&Spanned<Expr>> {
+	match &exprspan.0 {
+    Expr::Error => None,
+    Expr::Value(_) => if exprspan.1.start <= offset && offset < exprspan.1.end { Some(exprspan) } else { None },
+    Expr::List(subexprs) => {
+			for expr in subexprs {
+				if let Some(expr) = get_atom_of_expr(expr, offset) {
+					return Some(expr);
+				}
+			}
+			None
+		},
+    Expr::Consideration(considered) => get_atom_of_expr(&considered, offset),
+    Expr::IntroRetro(intro_retrod) => {
+			for expr in intro_retrod {
+				if let Some(expr) = get_atom_of_expr(expr, offset) {
+					return Some(expr);
+				}
+			}
+			None
+		},
+    Expr::ConsideredIntroRetro(intro_retrod) => {
+			for expr in intro_retrod {
+				if let Some(expr) = get_atom_of_expr(expr, offset) {
+					return Some(expr);
+				}
+			}
+			None
+		},
 	}
 }
 

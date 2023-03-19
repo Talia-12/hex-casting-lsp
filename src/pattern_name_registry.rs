@@ -1,4 +1,4 @@
-use std::{path::Path, fs::File, io::BufReader, collections::HashMap, fmt::Display};
+use std::{path::Path, fs::File, io::BufReader, collections::HashMap, fmt::Display, env};
 
 use chumsky::primitive::todo;
 use itertools::Either;
@@ -8,7 +8,8 @@ use serde_json::Value;
 
 use crate::hex_pattern::{HexPattern, HexDir, HexAbsoluteDir};
 
-static REGISTRY: Lazy<Result<(HashMap<String, RegistryEntry>, HashMap<String, RegistryEntry>, HashMap<HexPattern, RegistryEntry>), PatternNameRegistryError>> = Lazy::new(|| get_registry_from_file("registry.json"));
+pub static REGISTRY: Lazy<Result<(HashMap<String, RegistryEntry>, HashMap<String, RegistryEntry>, HashMap<HexPattern, RegistryEntry>), PatternNameRegistryError>>
+	= Lazy::new(|| get_registry_from_str(include_str!("../registry.json")));
 
 pub fn get_consideration() -> Result<StatOrDynRegistryEntry, PatternNameRegistryError> {
 	registry_entry_from_id("escape")
@@ -220,6 +221,11 @@ fn get_registry_from_file<P: AsRef<Path>>(path: P) -> Result<(HashMap<String, Re
 	get_registry(v)
 }
 
+fn get_registry_from_str(string: &str) -> Result<(HashMap<String, RegistryEntry>, HashMap<String, RegistryEntry>, HashMap<HexPattern, RegistryEntry>), PatternNameRegistryError> {
+	let v = serde_json::from_str(string)?;
+	get_registry(v)
+}
+
 fn get_registry(v: Value) -> Result<(HashMap<String, RegistryEntry>, HashMap<String, RegistryEntry>, HashMap<HexPattern, RegistryEntry>), PatternNameRegistryError> {
 	match v {
     Value::Null => Err(PatternNameRegistryError::RegistryFormatError),
@@ -311,5 +317,10 @@ mod test {
 		assert_eq!(entries_by_name, expected_entries_vec.iter().map(|entry| (entry.name.clone(), entry.clone())).collect());
 		assert_eq!(entries_by_id, expected_entries_vec.iter().map(|entry| (entry.id.clone(), entry.clone())).collect());
 		assert_eq!(entries_by_pattern, expected_entries_vec.iter().filter_map(|entry| entry.pattern.clone().map(|pat| (pat, entry.clone()))).collect());
+	}
+
+	#[test]
+	fn test_reading_registry_from_file() {
+		assert!(get_consideration().is_ok())
 	}
 }
