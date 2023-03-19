@@ -497,8 +497,6 @@ async fn main() {
 	let stdin = tokio::io::stdin();
 	let stdout = tokio::io::stdout();
 
-	println!("asdfasdfasdf");
-
 	let (service, socket) = LspService::build(|client| Backend {
 		client,
 		ast_map: DashMap::new(),
