@@ -309,9 +309,9 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 				Token::Str(s) => Expr::Value(Iota::Str(s)),
 			}.labelled("simple_iota");
 
-			let vec3 = num.clone().then(num.clone()).then(num.clone())
+			let vec3 = num.clone().separated_by(just(Token::Ctrl(','))).at_least(3).at_most(3)
 				.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-				.map(|((x, y), z)| Expr::Value(Iota::Vec3(x, y, z)))
+				.map(|coords| Expr::Value(Iota::Vec3(coords[0], coords[1], coords[2])))
 				.labelled("vec3");
 
 			let pattern = hex_pattern_from_signature()
@@ -352,7 +352,7 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 				.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
 			).labelled("entity_type");
 
-			let item_type = just(Token::EntityType).ignore_then(
+			let item_type = just(Token::ItemType).ignore_then(
 				select! { Token::Ident(s) => s }.repeated().at_least(1)
 				.map(|name_sections| name_sections.into_iter().intersperse(' '.to_string()).collect())
 				.map(|name| Expr::Value(Iota::ItemType(name)))
@@ -615,7 +615,7 @@ pub fn parse(
 					length: span.len(),
 					token_type: LEGEND_TYPE
 							.iter()
-							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.position(|item| item == &SemanticTokenType::FUNCTION)
 							.unwrap(),
 				}),
 				Token::Matrix => Some(ImCompleteSemanticToken {
@@ -623,7 +623,7 @@ pub fn parse(
 					length: span.len(),
 					token_type: LEGEND_TYPE
 							.iter()
-							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.position(|item| item == &SemanticTokenType::FUNCTION)
 							.unwrap(),
 				}),
 				Token::IotaType => Some(ImCompleteSemanticToken {
@@ -631,7 +631,7 @@ pub fn parse(
 					length: span.len(),
 					token_type: LEGEND_TYPE
 							.iter()
-							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.position(|item| item == &SemanticTokenType::FUNCTION)
 							.unwrap(),
 				}),
 				Token::EntityType => Some(ImCompleteSemanticToken {
@@ -639,7 +639,7 @@ pub fn parse(
 					length: span.len(),
 					token_type: LEGEND_TYPE
 							.iter()
-							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.position(|item| item == &SemanticTokenType::FUNCTION)
 							.unwrap(),
 				}),
 				Token::ItemType => Some(ImCompleteSemanticToken {
@@ -647,7 +647,7 @@ pub fn parse(
 					length: span.len(),
 					token_type: LEGEND_TYPE
 							.iter()
-							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.position(|item| item == &SemanticTokenType::FUNCTION)
 							.unwrap(),
 				}),
 				Token::Gate => Some(ImCompleteSemanticToken {
@@ -655,7 +655,7 @@ pub fn parse(
 					length: span.len(),
 					token_type: LEGEND_TYPE
 							.iter()
-							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.position(|item| item == &SemanticTokenType::FUNCTION)
 							.unwrap(),
 				}),
 				Token::Mote => Some(ImCompleteSemanticToken {
@@ -663,7 +663,7 @@ pub fn parse(
 					length: span.len(),
 					token_type: LEGEND_TYPE
 							.iter()
-							.position(|item| item == &SemanticTokenType::KEYWORD)
+							.position(|item| item == &SemanticTokenType::FUNCTION)
 							.unwrap(),
 				}),
     		Token::Import => Some(ImCompleteSemanticToken {

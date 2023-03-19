@@ -33,7 +33,7 @@
             }
         }
     ],
-    "wordPattern": "(?<=^\\s*)Consideration:|(?<=^\\s*(?:Consideration: )?)(?!//|/\\*| )[a-zA-Z0-9:'+\\-./ _]+?(?= *(?://|/\\*|$))",
+    "wordPattern": "(?<=^\\s*)Consideration:|(?:(?<=^\\s*(?:Consideration:[^\\S\\r\\n]+)?)|(?<=^\\s*#define[^\\S\\r\\n]+))(?!//|/\\*| )[a-zA-Z0-9:'+\\-./ _]+?(?= *(?://|/\\*|(?:HexPattern)?\\(|$))|(?<!^.*(?://|/\\*).*)(?<=(?:HexPattern)?\\()[a-zA-Z_\\-]+((?:[^\\S\\r\\n]+)[aqwedsAQWEDS]+)?(?=[^\\S\\r\\n]*(?:\\)))|(?<!^.*(?://|/\\*).*)(?<=(?:Entity)|(?:Matrix)|(?:IotaType)|(?:IotaType)|(?:EntityType)|(?:ItemType)|(?:Gate)|(?:Mote)\\().+?(?=\\))",
     "indentationRules": {
         "increaseIndentPattern": "(?<!//.*)[\\[{]",
         "decreaseIndentPattern": "(?<!//.*)[\\]}]"
