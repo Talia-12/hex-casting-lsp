@@ -2,10 +2,9 @@ use chumsky::Parser;
 use chumsky::Stream;
 use chumsky::prelude::*;
 use chumsky::text::newline;
-use num_traits::ToPrimitive;
 use core::fmt;
 use std::collections::HashMap;
-use std::iter;
+use std::collections::HashSet;
 use tower_lsp::lsp_types::SemanticTokenType;
 use itertools::Itertools;
 
@@ -17,7 +16,6 @@ use crate::iota_types::Iota;
 use crate::iota_types::IotaType;
 use crate::matrix_helpers::vecs_to_dyn_matrix;
 use crate::pattern_name_registry;
-use crate::pattern_name_registry::PatternNameRegistryError;
 use crate::semantic_token::LEGEND_TYPE;
 
 /// This is the parser and interpreter for the 'Foo' language. See `tutorial.md` in the repository's root to learn
@@ -128,8 +126,11 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 	// A parser for identifiers and keywords
 	let ident = ident().map(|ident: String| match ident.as_str() {
 		"true" => Token::Bool(true),
+		"True" => Token::Bool(true),
 		"false" => Token::Bool(false),
+		"False" => Token::Bool(false),
 		"null" => Token::Null,
+		"Null" => Token::Null,
 		"Entity" => Token::Entity,
 		"Matrix" => Token::Matrix,
 		"IotaType" => Token::IotaType,
@@ -237,18 +238,12 @@ pub struct Macro {
 fn hex_pattern_from_signature() -> impl Parser<Token, HexPatternIota, Error = Simple<Token>> + Clone {
 	let pattern = filter_map(|span: Span, tok| match tok {
 			Token::HexAbsoluteDir(absdir) => Ok(absdir),
-			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
+			_ => Err(Simple::custom(span, format!("Expected a valid absolute direction, found {tok}")))
 		})
 		.then_ignore(just(Token::Ctrl(',')).or_not())
 		.then(filter_map(|span, tok: Token| match tok.clone() {
-			Token::Ident(dirs) => HexDir::from_str(&dirs).map_err(|err|
-				Simple::expected_input_found(
-					span,
-					vec![Some(Token::Ident(format!("Error getting pattern dirs from {dirs}")))],
-					Some(tok)
-				)
-			),
-			_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
+			Token::Ident(dirs) => HexDir::from_str(&dirs).map_err(|err| Simple::custom(span, format!("Error {err:?} getting pattern dirs from {dirs}"))),
+			_ => Err(Simple::custom(span, format!("Expected hex dirs (AQWEDS), found {tok}")))
 		}))
 		.map(|(start_dir, dirs)| HexPattern::new(start_dir, dirs));
 
@@ -264,8 +259,8 @@ fn pattern_name() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
 		Token::Num(n) => Ok(n),
 		Token::Ident(name_part) => Ok(name_part),
 		Token::Bookkeepers(name_part) => Ok(name_part),
-		Token::Ctrl(name_part) => if name_part == ':' { Ok(name_part.to_string()) } else { Err(Simple::expected_input_found(span, Vec::new(), Some(tok))) }
-		_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+		Token::Ctrl(name_part) => if name_part == ':' { Ok(name_part.to_string()) } else { Err(Simple::custom(span, format!("{name_part} is not a valid character for a pattern name."))) }
+		_ => Err(Simple::custom(span, format!("Expected a valid section of a pattern name, found {tok}"))),
 	})
 	.repeated()
 	.at_least(1)
@@ -315,7 +310,8 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 				.labelled("vec3");
 
 			let pattern = hex_pattern_from_signature()
-				.or(hex_pattern_from_name().then_ignore(just(Token::Ctrl('\n'))))
+				.or(hex_pattern_from_name())
+				.then_ignore(just(Token::Ctrl('\n')).or(just(Token::Ctrl(',')).rewind()))
 				.map(|pattern| Expr::Value(Iota::Pattern(pattern)))
 				.labelled("pattern");
 
@@ -329,7 +325,7 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 
 					maybe_dm
 						.map(|dm| Expr::Value(Iota::Matrix(dm)))
-						.ok_or_else(|| Simple::expected_input_found(span, vec![Some(Token::Ident("A matrix with each row and column containing the same number of entries.".to_string()))], Some(Token::Ctrl(';'))))
+						.ok_or_else(|| Simple::custom(span, "A matrix with each row and column containing the same number of entries."))
 				}).delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
 			).labelled("matrix");
 
@@ -339,9 +335,9 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 						if let Some(i_type) = IotaType::get_type(&s) {
 							Ok(Expr::Value(Iota::IotaType(i_type))) }
 						else {
-							Err(Simple::expected_input_found(span, Vec::new(), Some(tok)))
+							Err(Simple::custom(span, "A valid iota type"))
 						},
-					_ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+					_ => Err(Simple::custom(span, "A valid iota type")),
 				}).delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
 			).labelled("iota_type");
 
@@ -386,8 +382,7 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 			// A list of expressions
 			let list = non_braced_expr
 				.clone()
-				.chain(just(Token::Ctrl(',')).ignore_then(non_braced_expr.clone()).repeated())
-				.then_ignore(just(Token::Ctrl(',')).or_not())
+				.separated_by(just(Token::Ctrl(',')))
 				.or_not()
 				.map(|item| item.unwrap_or_else(Vec::new))
 				.delimited_by(just(Token::Ctrl('[')), just(Token::Ctrl(']')))
@@ -401,7 +396,7 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 			let consideration = just(vec![Token::Ident("Consideration".to_string()), Token::Ctrl(':')]).try_map(|_, span: Span|
 					pattern_name_registry::get_consideration()
 						.map(|consideration| (HexPatternIota::RegistryEntry(consideration), span.clone()))
-						.map_err(|err| Simple::expected_input_found(span, vec![Some(Token::Ident(format!("Registry error: {:?}", err)))], Some(Token::Arrow)))
+						.map_err(|err| Simple::custom(span, format!("Registry error: {:?}", err)))
 				).then(considerable)
 				.map(|((_, consideration_span), (expr, expr_span)): (Spanned<HexPatternIota>, Spanned<Expr>)| Expr::Consideration(Box::new((expr, expr_span)), consideration_span));
 
@@ -475,7 +470,7 @@ pub fn macros_parser() -> impl Parser<Token, (HashMap<String, Macro>, HashMap<He
 
 	let macro_parser = just(Token::Define)
 		.ignore_then(name)
-		.then(hex_pattern_from_signature().map_with_span(|pattern, span| (pattern.get_pattern_no_macro_lookup(), span)))
+		.then(hex_pattern_from_signature().map_with_span(|pattern, span| (pattern.get_pattern(), span)))
 		.then_ignore(just(Token::Ctrl('=')))
 		.then(type_signature)
 		.then(expr_parser())
@@ -491,10 +486,10 @@ pub fn macros_parser() -> impl Parser<Token, (HashMap<String, Macro>, HashMap<He
 
 			for ((name, name_span), (pattern, pattern_span), m) in ms {
 				if macros_by_name.insert(name.clone(), m.clone()).is_some() {
-					return Err(Simple::expected_input_found(name_span, vec![Some(Token::Ident(format!("Macro '{name}' already exists")))], Some(Token::Arrow)));
+					return Err(Simple::custom(name_span, format!("Macro '{name}' already exists")));
 				}
 				if macros_by_pattern.insert(pattern.clone(), m).is_some() {
-					return Err(Simple::expected_input_found(pattern_span, vec![Some(Token::Ident(format!("Macro with pattern '{pattern}' already exists")))], Some(Token::Arrow)));
+					return Err(Simple::custom(pattern_span, format!("Macro with pattern '{pattern}' already exists")));
 				}
 			}
 
@@ -515,6 +510,12 @@ impl From<(HashMap<String, Macro>, HashMap<HexPattern, Macro>, Option<Spanned<Ex
 	}
 }
 
+impl AST {
+	fn get_macro_ids(&self) -> Vec<(String, HexPattern)> {
+		return self.macros_by_name.iter().map(|(name, hex_macro)| (name.clone(), hex_macro.pattern.0.clone())).collect()
+	}
+}
+
 pub fn main_parser() -> impl Parser<Token, AST, Error = Simple<Token>> + Clone {
 	macros_parser()
 		.then_ignore(just(Token::Ctrl('\n')).repeated())
@@ -525,6 +526,73 @@ pub fn main_parser() -> impl Parser<Token, AST, Error = Simple<Token>> + Clone {
 pub(crate) struct Error {
 	pub(crate) span: Span,
 	pub(crate) msg: String,
+}
+
+/// Takes in the AST with all the macro references represented as HexPatternIota::MacroPreprocessed, and replaces them with HexPatternIota::Macros with the
+/// correct name and pattern. Also adds parse_errs for non-existant macro names, and for macro reference cycles.
+fn finalise_macro_references(ast: &mut AST, parse_errs: &mut Vec<Simple<Token>>) {
+	let mut dependency_map = HashMap::new();
+
+	let macro_ids = ast.get_macro_ids();
+
+	for (name, hex_macro) in &mut ast.macros_by_name {
+		match &mut hex_macro.body.0 {
+			Expr::Error => { },
+			Expr::Value(_) => { },
+			Expr::List(exprs) => finalise_macro_references_for_exprs(exprs, Some(name), &macro_ids, &mut dependency_map, parse_errs),
+			Expr::Consideration(_, _) => { },
+			Expr::IntroRetro(exprs) => finalise_macro_references_for_exprs(exprs, Some(name), &macro_ids, &mut dependency_map, parse_errs),
+			Expr::ConsideredIntroRetro(exprs) => finalise_macro_references_for_exprs(exprs, Some(name), &macro_ids, &mut dependency_map, parse_errs),
+		}
+	}
+
+	// TODO: find cyclic dependencies.
+
+	if let Some(main) = &mut ast.main {
+		finalise_macro_references_for_expr(main, None, &macro_ids, &mut dependency_map, parse_errs);
+	}
+}
+
+fn finalise_macro_references_for_exprs<'a>(exprs: &mut Vec<Spanned<Expr>>, owner_macro_name: Option<&'a str>, macro_ids: &'a Vec<(String, HexPattern)>, dependency_map: &mut HashMap<&'a str, HashSet<&'a str>>, parse_errs: &mut Vec<Simple<Token>>) {
+	for sub_expr in exprs {
+		finalise_macro_references_for_expr(sub_expr, owner_macro_name, macro_ids, dependency_map, parse_errs)
+	}
+}
+
+/// Takes in an expression, and finds all references to other macros inside it. For each reference found, replace the reference with a proper HexPatternIota::Macro, and add
+/// the reference to the dependency map so that cyclic dependencies can be calculated later. If a reference has no referent, add a parse_err.
+fn finalise_macro_references_for_expr<'a>((expr, span): &mut Spanned<Expr>, owner_macro_name: Option<&'a str>, macro_ids: &'a Vec<(String, HexPattern)>, dependency_map: &mut HashMap<&'a str, HashSet<&'a str>>, parse_errs: &mut Vec<Simple<Token>>) {
+	match expr {
+		Expr::Error => { },
+		Expr::Value(value) => if let Iota::Pattern(pattern) = value {
+			let to_replace_with = match pattern {
+				HexPatternIota::HexPattern(macro_pattern) => Ok(macro_ids.iter().find(|&macro_id| *macro_pattern == macro_id.1)),
+				HexPatternIota::RegistryEntry(_) => Ok(None),
+				HexPatternIota::MacroPreprocessed(macro_name) => {
+					macro_ids.iter()
+						.find(|&macro_id| *macro_name == macro_id.0)
+						.ok_or_else(|| Simple::<Token>::custom(span.clone(), format!("No macro with the name \"{macro_name}\" exists.")))
+						.map(|m| Some(m))
+				},
+				HexPatternIota::Macro(_, _) => Ok(None),
+			};
+
+			match to_replace_with {
+				Ok(to_replace_with) => if let Some((to_replace_with_name, to_replace_with_pattern)) = to_replace_with {
+					*pattern = HexPatternIota::Macro(to_replace_with_name.clone(), to_replace_with_pattern.clone());
+					
+					if let Some(owner_macro_name) = owner_macro_name {
+						dependency_map.entry(owner_macro_name).and_modify(|e| { e.insert(&to_replace_with_name); }).or_insert(vec![to_replace_with_name.as_str()].into_iter().collect());
+					}
+				},
+				Err(err) => parse_errs.push(err),
+			}
+		},
+		Expr::List(sub_exprs) => finalise_macro_references_for_exprs(sub_exprs, owner_macro_name, macro_ids, dependency_map, parse_errs),
+		Expr::Consideration(considered, _) => finalise_macro_references_for_expr(considered, owner_macro_name, macro_ids, dependency_map, parse_errs),
+		Expr::IntroRetro(sub_exprs) => finalise_macro_references_for_exprs(sub_exprs, owner_macro_name, macro_ids, dependency_map, parse_errs),
+		Expr::ConsideredIntroRetro(sub_exprs) => finalise_macro_references_for_exprs(sub_exprs, owner_macro_name, macro_ids, dependency_map, parse_errs),
+	}
 }
 
 pub fn parse(
@@ -544,7 +612,14 @@ pub fn parse(
 		let semantic_tokens = tokens
 			.iter()
 			.filter_map(|(token, span)| match token {
-				Token::Null => None,
+				Token::Null => Some(ImCompleteSemanticToken {
+					start: span.start,
+					length: span.len(),
+					token_type: LEGEND_TYPE
+						.iter()
+						.position(|item| item == &SemanticTokenType::ENUM_MEMBER)
+						.unwrap(),
+				}),
 				Token::Bool(_) => Some(ImCompleteSemanticToken {
 					start: span.start,
 					length: span.len(),
@@ -680,8 +755,12 @@ pub fn parse(
 			.collect::<Vec<_>>();
 
 		let len = src.chars().count();
-		let (ast, parse_errs) =
+		let (mut ast, mut parse_errs) =
 			main_parser().parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter().filter(|(token, _)| !token.is_comment())));
+
+		if let Some(ast) = &mut ast {
+			finalise_macro_references(ast, &mut parse_errs)
+		}
 
 		// println!("{:#?}", ast);
 		// if let Some((macros_by_name, macros_by_pattern, main_body)) = ast.filter(|_| errs.len() + parse_errs.len() == 0) {
@@ -840,7 +919,7 @@ return vec![
 			let tokens = lexer().parse(*input).unwrap().into_iter().map(|(token, _span)| token).collect::<Vec<_>>();
 			let pattern = hex_pattern_from_signature().parse(tokens).unwrap();
 
-			assert_eq!(pattern.get_pattern_no_macro_lookup(), output);
+			assert_eq!(pattern.get_pattern(), output);
 		}
 	}
 
@@ -928,6 +1007,45 @@ return vec![
 	}
 
 	#[test]
+	fn test_list_parsing() {
+		let test_input = "Consideration: {
+	[1, 2, 3]
+	[
+		1,
+		2,
+		Mind's Reflection,
+		4
+	]		
+Consideration: }";
+	
+		let minds_reflection = registry_entry_from_name("Mind's Reflection").unwrap();
+
+		let test_output: AST = (
+			HashMap::new(),
+			HashMap::new(),
+			Some((
+				Expr::ConsideredIntroRetro(vec![
+					(Expr::List(vec![(Expr::Value(Iota::Num(1.0)), 19..20), (Expr::Value(Iota::Num(2.0)), 22..23), (Expr::Value(Iota::Num(3.0)), 25..26)]), 18..27),
+					(Expr::List(vec![(Expr::Value(Iota::Num(1.0)), 30..34), (Expr::Value(Iota::Num(2.0)), 35..39),
+					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(minds_reflection))), 40..60),
+					(Expr::Value(Iota::Num(4.0)), 61..66)]), 29..68)
+				]), 0..87
+			))
+		).into();
+
+		let (ast, errs, semantic_tokens) = parse(test_input);
+		let ast = ast.unwrap();
+			
+		// if errs.len() != 0 {
+			dbg!(test_input);
+			dbg!(errs);
+			dbg!(semantic_tokens);
+		// }
+
+		assert_eq!(ast, test_output)
+	}
+
+	#[test]
 	fn test_all_parsing() {
 		let test_inputs: Vec<String> = test_inputs();
 
@@ -1012,7 +1130,7 @@ return vec![
 				Expr::IntroRetro(vec![
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(numerical_reflection_0.clone()))), 94..118),
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(numerical_reflection_1.clone()))), 119..143),
-					(Expr::Value(Iota::Pattern(HexPatternIota::MacroPreprocessed("New Distillation".to_string()))), 144..161),
+					(Expr::Value(Iota::Pattern(HexPatternIota::Macro("New Distillation".to_string(), HexPattern::new(HexAbsoluteDir::SouthEast, vec![HexDir::A, HexDir::Q, HexDir::W, HexDir::E, HexDir::D])))), 144..161),
 					(Expr::Value(Iota::Pattern(HexPatternIota::RegistryEntry(reveal.clone()))), 162..169),
 				]),
 				91..170

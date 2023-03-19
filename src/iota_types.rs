@@ -49,6 +49,7 @@ pub enum HexPatternIota {
 	HexPattern(HexPattern),
 	RegistryEntry(StatOrDynRegistryEntry),
 	MacroPreprocessed(String),
+	Macro(String, HexPattern),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -64,6 +65,7 @@ impl Display for HexPatternIota {
 			HexPatternIota::HexPattern(pattern) => write!(f, "{}", pattern),
 			HexPatternIota::RegistryEntry(entry) => write!(f, "{}", entry.get_name()),
    		HexPatternIota::MacroPreprocessed(name) => write!(f, "{name}"),
+    	HexPatternIota::Macro(name, pattern) => write!(f, "{name}: {pattern}"),
 		}
 	}
 }
@@ -82,6 +84,7 @@ impl Serialize for HexPatternIota {
 				}
 			},
     	HexPatternIota::MacroPreprocessed(name) => SerialisedHexPatternIota::Macro(name.clone()).serialize(serializer),
+    	HexPatternIota::Macro(name, _) => SerialisedHexPatternIota::Macro(name.clone()).serialize(serializer),
 		}
 	}
 }
@@ -105,11 +108,12 @@ impl From<HexPattern> for HexPatternIota {
 }
 
 impl HexPatternIota {
-	pub fn get_pattern_no_macro_lookup(&self) -> HexPattern {
+	pub fn get_pattern(&self) -> HexPattern {
 		match self {
 			HexPatternIota::HexPattern(pattern) => pattern.clone(),
 			HexPatternIota::RegistryEntry(entry) => entry.get_pattern().unwrap_or(HexPattern { start_dir: HexAbsoluteDir::NorthEast, pattern_vec: vec![HexDir::S, HexDir::Q, HexDir::S, HexDir::Q] }),
-    	HexPatternIota::MacroPreprocessed(name) => HexPattern { start_dir: HexAbsoluteDir::NorthEast, pattern_vec: vec![HexDir::S, HexDir::Q, HexDir::S, HexDir::Q] },
+    	HexPatternIota::MacroPreprocessed(name) => HexPattern::new( HexAbsoluteDir::NorthEast, vec![HexDir::S, HexDir::Q, HexDir::S, HexDir::Q]),
+    	HexPatternIota::Macro(_, pattern) => pattern.clone(),
 		}
 	}
 }

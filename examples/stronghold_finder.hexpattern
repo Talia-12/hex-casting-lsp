@@ -7,12 +7,43 @@
 	
 }
 
+#define Pattern Name: 7 (SOUTHEAST aaqqwweedd) = a -> b {
+	Pattern Name: 4
+}
+
 {
+	/*
+	A test multiline comment.
+	*/
+	Pattern Name: 7
+	Consideration: /**/ null
+	Consideration: Null
+	Consideration: true
+	Consideration: (1, 2, 3)
+	Consideration: Mind's Reflection
+	Consideration: Mote(5)
+	Consideration: EntityType(Zombie Villager)
+	Consideration: ItemType(Iron Chestplate)
+	Consideration: "A test string"
+	Consideration: [
+		Compass' Purification,
+		2,
+		3
+	]
+	[1, 2, 3]
 	Mind's Reflection
-	Compass' Purification
+	Compass' Purification // asdf
+	Bookkeeper's Gambit: v-vvv-v-v
 	Numerical Reflection: 20
 	Prospector's Gambit
 	Prospector's Gambit
+	{
+		Prospector's Gambit
+		Prospector's Gambit
+		Prospector's Gambit
+	}
+	
+
 	Numerical Reflection: 2
 	Flock's Gambit
 	Huginn's Gambit
@@ -106,4 +137,6 @@
 
 	Augur's Exaltation
 	Hermes' Gambit
+
+	Pattern Name: 4
 }

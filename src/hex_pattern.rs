@@ -3,7 +3,7 @@ use std::{ops::{Add, Sub}, f32::consts::TAU};
 use num_derive::{FromPrimitive, ToPrimitive};    
 use num_traits::{FromPrimitive, ToPrimitive};
 
-#[derive(PartialEq, Eq, Hash, Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum HexPatternError {
 	Overlap,
 	InvalidString,
