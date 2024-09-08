@@ -55,7 +55,18 @@ pub fn semantic_token_from_expr(
 ) {
     match &expr.0 {
         Expr::Error => {}
-        Expr::Value(_) => {}
+        Expr::Value(iota) => match iota {
+					crate::iota_types::Iota::Entity(_) => { },
+					crate::iota_types::Iota::List(_) => { },
+					crate::iota_types::Iota::Pattern(_) => { },
+					crate::iota_types::Iota::Matrix(_) => { },
+					crate::iota_types::Iota::IotaType(_) => { },
+					crate::iota_types::Iota::EntityType(_) => { },
+					crate::iota_types::Iota::ItemType(_) => { },
+					crate::iota_types::Iota::Gate(_) => { },
+					crate::iota_types::Iota::Mote(_) => { },
+					_ => {  }
+        }
         Expr::List(_) => {}
         Expr::Consideration(_, _) => {},
         Expr::IntroRetro(_) => {},

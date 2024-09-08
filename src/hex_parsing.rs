@@ -315,9 +315,12 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 				.map(|pattern| Expr::Value(Iota::Pattern(pattern)))
 				.labelled("pattern");
 
-			let entity = just(Token::Entity).ignore_then(select! {
-				Token::Ident(name) => Expr::Value(Iota::Entity(name)),
-			}.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))).labelled("entity");
+				let entity = just(Token::Entity).ignore_then(
+					select! { Token::Ident(s) => s }.repeated().at_least(1)
+					.map(|name_sections| name_sections.into_iter().intersperse(' '.to_string()).collect())
+					.map(|name| Expr::Value(Iota::Entity(name)))
+					.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+				).labelled("entity");
 
 			let matrix = just(Token::Matrix).ignore_then(
 				num.clone().separated_by(just(Token::Ctrl(','))).separated_by(just(Token::Ctrl(';'))).try_map(|vecvec, span| {
@@ -380,10 +383,12 @@ fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = Simple<Token>> + C
 				.delimited_by(just(Token::Ctrl('\n')).repeated(), just(Token::Ctrl('\n')).repeated());
 
 			// A list of expressions
-			let list = non_braced_expr
-				.clone()
-				.separated_by(just(Token::Ctrl(',')))
-				.or_not()
+			let list = just(Token::Ctrl('\n')).repeated().ignore_then(
+					non_braced_expr
+						.clone()
+						.separated_by(just(Token::Ctrl(',')))
+						.or_not()
+				)
 				.map(|item| item.unwrap_or_else(Vec::new))
 				.delimited_by(just(Token::Ctrl('[')), just(Token::Ctrl(']')))
 				.map(Expr::List);
